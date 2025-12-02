@@ -1,0 +1,21 @@
+instruction: |-
+  Estimate how many linear regimes best explain y as a function of t. Return the regime count and breakpoint dates.
+
+  **Output Format:**
+
+  Return a JSON object wrapped in ```json code blocks with the following fields:
+
+  ```json
+  {
+    "regime_count": <integer>,
+    "breakpoints": [<date1>, <date2>, ...]
+  }
+  ```
+
+  **Requirements:**
+  - `regime_count` should be an integer
+  - `breakpoints` should be listed in ascending order
+  - Dates should be in YYYY-MM-DD format
+  - A tolerance of ±7 days is acceptable when evaluating breakpoint correctness
+
+  The data file is located at /home/gem/assets/series.csv. It contains columns: date, t, y.

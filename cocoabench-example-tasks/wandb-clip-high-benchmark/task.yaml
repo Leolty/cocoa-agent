@@ -1,0 +1,21 @@
+instruction: |-
+  You are given W&B logs from several reinforcement learning runs of LLMs at https://wandb.ai/mbzuai-llm/Guru?nw=nwuserz6cheng. Identify the number of validation benchmarks in "val" section, where clip-high=0.28, a method adopted in the RL for reasoning paper DAPO, can provide clear performance gain over baseline (w/o clip-high=0.28) on 32B model.
+
+  **Clear Gain Definition:**
+
+  We assume "clear gain" on one benchmark if given run A and B:
+
+  ```
+  max_validation_score(run_A) - max_validation_score(run_B) > 0.02
+  ```
+
+  Where run A uses clip-high=0.28 and run B is the baseline without clip-high.
+
+  **Output Format:**
+
+  ```
+  <answer>5</answer>
+  ```
+
+  Answer with the number of validation benchmarks satisfying the requirement (single integer).
+

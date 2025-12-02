@@ -1,0 +1,43 @@
+instruction: |-
+  You are logging into the company's internal discount shopping portal at https://leoii22.com/pages/amazon to buy some snacks for a party. The site is functional but feels very much like a demo: the interface is bare-bones, displaying only product images and short, sometimes truncated titles.
+
+  **Important:** The search bar is primitive. Unless you have the exact character string for a title, do NOT rely on search.
+
+  Your goal is to purchase specific **Trader Joe's** and **Terra** brand chips for three colleagues and yourself. Note that the site itself sometimes does not list brand names clearly or provide any nutritional information.
+
+  **Shopping Requests:**
+
+  Please identify the correct products from the Trader Joe's and Terra selection and add them to your cart based on the following specific requests:
+
+  1. **Alice (The Sugar Cutter):**
+     "I'm strictly limiting my sugar. Out of these specific brands, find the bag with the absolute lowest Total Sugars per serving. Get me 1 bag of that."
+
+  2. **Bob (The Sodium Watcher):**
+     "My doctor is watching my salt intake. Compare the labels of these brands and find the one with the absolute lowest Sodium per serving. I want 2 bags of that one."
+
+  3. **Charlie (The Quant):**
+     "I have a specific calculation for nutrient density. Apply this formula to the available Trader Joe's and Terra options using their % Daily Values (%DV):
+
+     Score = (%DV Total Fat + %DV Sodium + %DV Added Sugars + (Calories / 21.18)) - (1.48 * %DV Dietary Fiber + %DV Protein)
+
+     *(Note: If Protein %DV is not listed, use 1g ≈ 2%. Ignore if Protein is less than 1g. Use the raw number instead of %DV for Calories.)*
+
+     I want the item with the lowest Score (which indicates the best balance). Get me 3 bags of that winner."
+
+  4. **You (The Review Truster):**
+     You decide to stock up for yourself as well. Look at the user ratings displayed on the site for these specific Trader Joe's and Terra chips. You want to buy 2 bags of the item with the highest user rating and 2 bags of the item with the second highest user rating.
+
+  **Task:**
+
+  You need to find the correct items on the site, add the specified quantities to your cart, and report the "Total" displayed on the checkout screen.
+
+  **Note:** Do not calculate the total price manually by adding up unit prices. The system may apply internal discounts, shipping fees, or tax that only appears in the final cart view.
+
+  **Output Format:**
+
+  ```
+  <answer>$45.67</answer>
+  ```
+
+  Answer with the exact total from the checkout screen (include the $ symbol).
+

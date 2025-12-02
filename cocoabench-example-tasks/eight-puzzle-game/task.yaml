@@ -1,0 +1,18 @@
+instruction: |-
+  You will be playing the 8-puzzle game at the following website:
+  https://8puzzle-game.vercel.app/
+
+  **Task:**
+
+  The puzzle's goal state is hidden; you must determine the correct target configuration by interacting with the interface. After identifying this target state, solve the puzzle from its initial state optimally—that is, using the minimum possible number of moves.
+
+  A code can be checked at any time, and it changes as you make moves. Only the code shown at the moment you reach the correct target configuration with an optimal solution is valid.
+
+  **Output Format:**
+
+  ```
+  <answer>ABC123</answer>
+  ```
+
+  Your final answer must be the exact code displayed when you reach the goal state with an optimal solution.
+

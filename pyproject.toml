@@ -1,0 +1,15 @@
+[project]
+name = "cocoa-agent"
+version = "0.1.0"
+description = "An agent framework for building and evaluating general digital agents"
+requires-python = ">=3.13"
+dependencies = [
+    "agent-sandbox>=0.0.16",
+    "colorama>=0.4.6",
+    "numpy>=2.3.4",
+    "openai>=2.6.1",
+    "pytest>=8.4.2",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "websocket-client>=1.9.0",
+]

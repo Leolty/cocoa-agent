@@ -1,0 +1,11 @@
+{
+  "log_level": "INFO",
+  "controller": {
+    "type": "human",
+    "args": {}
+  },
+  "sandbox": {
+    "max_iterations": 99999,
+    "docker_port": 8080
+  }
+}
