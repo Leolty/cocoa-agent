@@ -2,13 +2,12 @@
 
 Thank you for your interest in contributing to CocoaBench! 🎉
 
-We'd love to have your help in building a diverse and challenging benchmark. The best tasks come from real problems you've encountered — if it challenged you, it'll likely challenge AI agents too!
+We'd love to have your help in building a diverse and challenging benchmark. The best tasks come from real problems you've encountered — if it challenged you, it'll likely challenge AI agents too! Contributors with **3 accepted tasks** are eligible for co-authorship on the CocoaBench paper, which we plan to submit to a top-tier ML conference. We'll work with you through iterative refinement to help get your tasks accepted and ensure they meet benchmark standards. Particularly interesting or creative tasks may count for more at the discretion of project leads.
 
 This guide will walk you through the process of creating and submitting a new task. Don't worry if it's your first time — we've tried to make it as straightforward as possible.
 
 > 💡 **Quick tip:** Please encrypt your task files before submitting. This keeps our benchmark data safe from being found by LLM agents that can search online, which helps ensure fair evaluation for everyone.
 
----
 
 ## Quick Start
 
