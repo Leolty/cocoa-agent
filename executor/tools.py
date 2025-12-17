@@ -323,6 +323,121 @@ def get_browser_tools() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "browser_navigate",
+                "description": "Navigate the browser to a URL (DOM load).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "Destination URL to open"
+                        }
+                    },
+                    "required": ["url"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_get_text",
+                "description": "Get page text (innerText of body) via DOM, no vision required. Truncates long output.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_get_html",
+                "description": "Get full page HTML via DOM (truncated if long).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_query_selector",
+                "description": "Query elements with a CSS selector and summarize tag/text/href (no vision).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {
+                            "type": "string",
+                            "description": "CSS selector to query"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum elements to return (default 20)"
+                        }
+                    },
+                    "required": ["selector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_extract_links",
+                "description": "Extract hyperlinks (text + href) from the current page, optionally filtered.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filter_pattern": {
+                            "type": "string",
+                            "description": "Optional substring to filter links by href or text"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum links to return (default 50)"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_click",
+                "description": "Click a DOM element using a CSS selector (text-based, no coordinates).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {
+                            "type": "string",
+                            "description": "CSS selector to identify element(s) to click"
+                        },
+                        "nth": {
+                            "type": "integer",
+                            "description": "Zero-based index of the matched element to click (default 0)"
+                        },
+                        "button": {
+                            "type": "string",
+                            "enum": ["left", "right", "middle"],
+                            "description": "Mouse button to use (default left)"
+                        },
+                        "click_count": {
+                            "type": "integer",
+                            "enum": [1, 2],
+                            "description": "Number of clicks (1=click, 2=double click)"
+                        },
+                        "timeout_ms": {
+                            "type": "integer",
+                            "description": "Timeout in milliseconds for the click (default 2000)"
+                        }
+                    },
+                    "required": ["selector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "task_complete",
                 "description": "Mark the task as complete and exit. Optionally provide the final result/answer if the task requires returning a specific output (e.g., JSON answer). For tasks that generate files in the sandbox, you can omit the result parameter.",
                 "parameters": {
@@ -739,6 +854,12 @@ def map_tool_call_to_action(tool_name: str, arguments: Dict[str, Any]) -> Dict[s
         "browser_right_click": {"x", "y"},
         "browser_screenshot": set(),
         "browser_get_info": set(),
+        "browser_navigate": {"url"},
+        "dom_get_text": set(),
+        "dom_get_html": set(),
+        "dom_query_selector": {"selector", "limit"},
+        "dom_extract_links": {"filter_pattern", "limit"},
+        "dom_click": {"selector", "nth", "button", "click_count", "timeout_ms"},
         "file_read": {"path"},
         "file_write": {"path", "content"},
         "file_list": {"path"},
@@ -786,6 +907,12 @@ def map_tool_call_to_action(tool_name: str, arguments: Dict[str, Any]) -> Dict[s
         "browser_right_click": "RIGHT_CLICK",
         "browser_screenshot": "screenshot",
         "browser_get_info": "get_info",
+        "browser_navigate": "NAVIGATE",
+        "dom_get_text": "DOM_GET_TEXT",
+        "dom_get_html": "DOM_GET_HTML",
+        "dom_query_selector": "DOM_QUERY_SELECTOR",
+        "dom_extract_links": "DOM_EXTRACT_LINKS",
+        "dom_click": "DOM_CLICK",
         # File tools
         "file_read": "file_read",
         "file_write": "file_write",

@@ -86,6 +86,8 @@ You have access to these tool categories:
 - browser_double_click(x, y) / browser_right_click(x, y): Special click actions
 - browser_screenshot(): Capture current viewport (image) - CRITICAL for visual observation
 - browser_get_info(): Get current URL and viewport metadata
+- browser_navigate(url): Navigate to a URL (DOM load)
+- DOM tools (text-based, no vision): dom_get_text(), dom_get_html(), dom_query_selector(selector), dom_extract_links(filter_pattern?), dom_click(selector, nth=0, button=?, click_count=?)
 - **Note**: `browser_scroll()` is unavailable. To scroll, use `browser_move_to()` to position on scrollbar, then `browser_drag_rel()` or `browser_drag_to()`, or use keyboard shortcuts like `browser_press("PageDown")` or `browser_hotkey(["ctrl", "end"])`.
 
 **File Tools:**
@@ -105,9 +107,9 @@ You have access to these tool categories:
 - task_complete: Mark task as complete
 
 CRITICAL OPERATING RULES (follow exactly):
-1. **Screenshot-first policy**
-   - Because DOM/text APIs are disabled, use `browser_screenshot` to inspect UI state whenever you are uncertain where to click.
-   # - After every navigation that should change the page, TAKE a screenshot before any interactive click (unless you have a recent verified screenshot for that page). (Navigation is temporarily disabled)
+1. **Choose interaction mode (DOM-first, vision when needed)**
+   - Prefer DOM/text tools when you can identify targets by selector/text (`dom_get_text/html`, `dom_query_selector`, `dom_extract_links`, `dom_click`).
+   - Use vision/coords when DOM is insufficient or ambiguous. Before any visual click, take `browser_screenshot` to locate targets.
 
 2. **Action → Verify loop**
    - Every browser action intended to change page state must be followed by verification:
@@ -115,11 +117,8 @@ CRITICAL OPERATING RULES (follow exactly):
      - Compare to prior screenshot/URL to confirm meaningful change.
    - If no meaningful change, treat the action as failed and choose a different action.
 
-3. **Coordinate-based clicking (NO SELECTORS)**
-   - `browser_click` ONLY accepts coordinates (x, y) or no parameters (clicks at current cursor position).
-   - DO NOT use CSS selectors or any selector syntax - they are NOT supported.
-   - Use screenshot analysis to identify clickable elements and their coordinates.
-   - Click by coordinates (x, y) derived from screenshot analysis.
+3. **Visual clicks need evidence**
+   - For coordinates, `browser_click` ONLY accepts (x, y) or current cursor position.
    - Do NOT blindly retry the same coordinates more than 2 times unless you observed a state change in-between.
 
 4. **Loop/Failure protection**
@@ -193,6 +192,7 @@ Task:
 - **Navigation & Info:**
   - `browser_screenshot()`: Capture current viewport (CRITICAL - primary observation channel)
   - `browser_get_info()`: Get current URL and viewport metadata
+  - `browser_navigate(url)`: Navigate to a URL (DOM load)
 
 - **Mouse Actions:**
   - `browser_click(x, y)` or `browser_click()`: Click at coordinates or current position
@@ -214,6 +214,13 @@ Task:
   - `browser_wait(seconds)`: Wait for specified duration
   - **Note**: `browser_scroll()` is currently unavailable. To scroll the page, use `browser_move_to()` to move the mouse to the scrollbar area, then use `browser_drag_rel()` or `browser_drag_to()` to drag the scrollbar. Alternatively, use keyboard shortcuts like `browser_press("PageDown")` or `browser_hotkey(["ctrl", "end"])` to navigate the page.
 
+- **DOM/Text Actions (selector-based, no vision):**
+  - `dom_get_text()`: Get page text (innerText of body, truncated if long)
+  - `dom_get_html()`: Get page HTML (truncated if long)
+  - `dom_query_selector(selector, limit=20)`: List elements matching a CSS selector with tag/text/href summary
+  - `dom_extract_links(filter_pattern?, limit=50)`: Extract links (text + href) optionally filtered by substring
+  - `dom_click(selector, nth=0, button?, click_count?)`: Click an element matched by CSS selector (0-based index)
+
 ### File Tools
 - `file_read(path)`, `file_write(path, content)`, `file_list(path)`: Basic file operations
 - `file_upload(file, path)`, `file_download(path)`: Upload/download files between the sandbox (Docker container) and the host machine (for binary files). **Important**: These tools are for transferring files between the sandbox container and the host machine, NOT for downloading files from web browsers to the sandbox file system. To save web content, first use browser actions to access the content, then use `file_write` or other file operations to save it within the sandbox.
@@ -232,23 +239,11 @@ Task:
 
 ## Important Guidelines (VLM-Aware - Follow Strictly)
 
-### 1. Visual-First Navigation (MANDATORY)
-- Direct DOM/text extraction is disabled. Use `browser_screenshot()` as the primary observation channel.
-- After any click that should change the page, immediately:
-  1. Take a screenshot with `browser_screenshot()`
-  2. Call `browser_get_info()` to get current URL and metadata
-# Note: Navigation is temporarily disabled
+### 1. Choose interaction mode (DOM-first, vision when needed)
+- Prefer DOM/text tools when you can identify targets by selector/text (`dom_get_text/html`, `dom_query_selector`, `dom_extract_links`, `dom_click`).
+- Use vision/coords when DOM is insufficient or ambiguous. Before any visual click, take `browser_screenshot` to locate targets.
 
-### 2. Use VLM to Interpret Screenshots
-For each screenshot, use your VLM capability to identify:
-- Visible links/buttons and their textual labels
-- PDF badges/icons, "Download", "PDF", "BibTeX", or other actionable labels
-- Error indicators (404, "Page not found", server errors)
-- Page region coordinates (bounding boxes) for candidate clicks
-
-**Strategy**: Prefer clicking exact visible labels that match the user instruction. If none exist, identify the best visual candidate and click its coordinates.
-
-### 3. Verify After Actions
+### 2. Verify After Actions
 - After each click/navigation: screenshot + get_info, then compare to previous state
 - Treat an action as successful only if:
   - The URL changed meaningfully, OR

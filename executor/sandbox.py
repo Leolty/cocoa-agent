@@ -411,6 +411,188 @@ class BrowserSandboxClient(SandboxClient):
             # No running event loop, use asyncio.run()
             return asyncio.run(coro)
 
+    def _with_page(self, func):
+        """Connect to the running browser via CDP and run an async function on the active page."""
+        import asyncio
+        from playwright.async_api import async_playwright
+
+        async def runner():
+            browser_info = self.sdk_client.browser.get_info().data
+            async with async_playwright() as p:
+                browser = await p.chromium.connect_over_cdp(browser_info.cdp_url)
+                try:
+                    context = browser.contexts[0] if browser.contexts else await browser.new_context()
+                    page = context.pages[0] if context.pages else await context.new_page()
+                    await page.wait_for_load_state("domcontentloaded")
+                    return await func(page)
+                finally:
+                    # Closing the Playwright client disconnects but does not shut down the remote browser
+                    await browser.close()
+
+        return self._run_async(runner())
+
+    def _dom_get_text(self, max_chars: int = 8000) -> str:
+        """Return page text (innerText of body)."""
+        try:
+            async def op(page):
+                return await page.inner_text("body")
+
+            text = self._with_page(lambda page: op(page))
+            if text is None:
+                return "Page text is empty."
+            if len(text) > max_chars:
+                text = text[:max_chars] + "\n... (truncated)"
+            return f"Page text content:\n{text}"
+        except Exception as e:
+            logger.error(f"Failed to get page text: {e}")
+            return f"Failed to get page text: {str(e)}"
+
+    def _dom_get_html(self, max_chars: int = 12000) -> str:
+        """Return page HTML (page.content)."""
+        try:
+            async def op(page):
+                return await page.content()
+
+            html = self._with_page(lambda page: op(page))
+            if html is None:
+                return "Page HTML is empty."
+            if len(html) > max_chars:
+                html = html[:max_chars] + "\n... (truncated)"
+            return f"Page HTML content:\n{html}"
+        except Exception as e:
+            logger.error(f"Failed to get page HTML: {e}")
+            return f"Failed to get page HTML: {str(e)}"
+
+    def _dom_query_selector(self, selector: str, limit: int = 20) -> str:
+        """Query elements via CSS selector and summarize text/tag."""
+        try:
+            async def op(page):
+                elements = await page.query_selector_all(selector)
+                results = []
+                for i, element in enumerate(elements[:limit]):
+                    try:
+                        text = await element.inner_text()
+                    except Exception:
+                        text = ""
+                    try:
+                        tag = await element.evaluate("el => el.tagName")
+                    except Exception:
+                        tag = "UNKNOWN"
+                    try:
+                        href = await element.get_attribute("href")
+                    except Exception:
+                        href = None
+                    snippet = text[:200].replace("\n", " ").strip()
+                    info = f"{i+1}. <{tag}>"
+                    if href:
+                        info += f" href={href}"
+                    if snippet:
+                        info += f" text=\"{snippet}\""
+                    results.append(info)
+                extra = ""
+                if len(elements) > limit:
+                    extra = f"\n... and {len(elements) - limit} more elements"
+                return f"Found {len(elements)} element(s) matching selector '{selector}':\n" + "\n".join(results) + extra
+
+            return self._with_page(lambda page: op(page))
+        except Exception as e:
+            logger.error(f"Failed to query selector: {e}")
+            return f"Failed to query selector: {str(e)}"
+
+    def _dom_extract_links(self, filter_pattern: str | None = None, limit: int = 50) -> str:
+        """Extract links from page, optionally filtered by substring."""
+        try:
+            async def op(page):
+                links = await page.evaluate(
+                    """(pattern) => {
+                        const patt = pattern ? pattern.toLowerCase() : null;
+                        return Array.from(document.querySelectorAll('a[href]')).map((a, idx) => {
+                            const text = (a.innerText || '').trim();
+                            const href = a.href || '';
+                            const title = a.title || '';
+                            const keep = !patt || href.toLowerCase().includes(patt) || text.toLowerCase().includes(patt);
+                            return {text, href, title, keep};
+                        }).filter(l => l.keep);
+                    }""",
+                    filter_pattern,
+                )
+                summary = []
+                for i, link in enumerate(links[:limit]):
+                    label = link["text"][:80].replace("\n", " ")
+                    summary.append(f"{i+1}. {label} -> {link['href']}")
+                extra = ""
+                if len(links) > limit:
+                    extra = f"\n... and {len(links) - limit} more links"
+                header = f"Found {len(links)} link(s)" + (
+                    f" matching '{filter_pattern}'" if filter_pattern else ""
+                )
+                return header + (":\n" + "\n".join(summary) if summary else "")
+
+            return self._with_page(lambda page: op(page))
+        except Exception as e:
+            logger.error(f"Failed to extract links: {e}")
+            return f"Failed to extract links: {str(e)}"
+
+    def _dom_click(
+        self,
+        selector: str,
+        nth: int = 0,
+        button: str = "left",
+        click_count: int = 1,
+        timeout_ms: int = 2000,
+    ) -> str:
+        """Click a DOM element using a CSS selector (and optional index)."""
+        try:
+            async def op(page):
+                elements = await page.query_selector_all(selector)
+                if not elements:
+                    return f"No element found for selector '{selector}'"
+                idx = min(max(nth, 0), len(elements) - 1)
+                target = elements[idx]
+                await target.scroll_into_view_if_needed(timeout=timeout_ms)
+                await target.click(
+                    button=button,
+                    click_count=click_count,
+                    timeout=timeout_ms,
+                    force=True,
+                )
+                try:
+                    text = await target.inner_text()
+                    text = text.strip().replace("\n", " ")
+                except Exception:
+                    text = ""
+                return f"Clicked element {idx+1}/{len(elements)} matching '{selector}' (button={button}, clicks={click_count}). Text: {text[:120]}"
+
+            return self._with_page(lambda page: op(page))
+        except Exception as e:
+            logger.error(f"Failed to click selector: {e}")
+            return f"Failed to click selector: {str(e)}"
+
+    def _navigate_to_url(self, url: str) -> str:
+        """Navigate browser to a URL via CDP + Playwright."""
+        if not url:
+            raise ValueError("browser_navigate requires 'url' parameter")
+        try:
+            from playwright.async_api import async_playwright
+
+            async def op():
+                browser_info = self.sdk_client.browser.get_info().data
+                async with async_playwright() as p:
+                    browser = await p.chromium.connect_over_cdp(browser_info.cdp_url)
+                    try:
+                        context = browser.contexts[0] if browser.contexts else await browser.new_context()
+                        page = context.pages[0] if context.pages else await context.new_page()
+                        await page.goto(url, wait_until="domcontentloaded")
+                        return f"Successfully navigated to {url}"
+                    finally:
+                        await browser.close()
+
+            return self._run_async(op())
+        except Exception as e:
+            logger.error(f"Failed to navigate: {e}")
+            logger.exception("Full traceback:")
+            return f"Failed to navigate: {str(e)}"
+
     def get_feedback(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """Get feedback from executing a browser action.
 
@@ -444,6 +626,61 @@ class BrowserSandboxClient(SandboxClient):
                 "action": action,
                 "feedback": feedback
             })
+            return feedback
+
+        # DOM-based actions (selector/text-based, no coordinates)
+        if action.get("action_type") == "DOM_GET_TEXT":
+            message = self._dom_get_text()
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "DOM_GET_HTML":
+            message = self._dom_get_html()
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "DOM_QUERY_SELECTOR":
+            selector = action.get("selector")
+            limit = action.get("limit", 20)
+            if not selector:
+                feedback = {"done": False, "message": "selector is required for dom_query_selector"}
+            else:
+                message = self._dom_query_selector(selector, limit=limit)
+                feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "DOM_EXTRACT_LINKS":
+            pattern = action.get("filter_pattern")
+            limit = action.get("limit", 50)
+            message = self._dom_extract_links(filter_pattern=pattern, limit=limit)
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "DOM_CLICK":
+            selector = action.get("selector")
+            if not selector:
+                feedback = {"done": False, "message": "selector is required for dom_click"}
+            else:
+                message = self._dom_click(
+                    selector=selector,
+                    nth=action.get("nth", 0),
+                    button=action.get("button", "left"),
+                    click_count=action.get("click_count", 1),
+                    timeout_ms=action.get("timeout_ms", 2000),
+                )
+                feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "NAVIGATE":
+            url = action.get("url")
+            message = self._navigate_to_url(url)
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
 
         # Handle screenshot action
@@ -607,6 +844,8 @@ class UnifiedSandboxClient(SandboxClient):
             if action_type in ["CLICK", "TYPING", "PRESS", "KEY_DOWN", "KEY_UP", "HOTKEY",
                               "SCROLL", "MOVE_TO", "MOVE_REL", "DRAG_TO", "DRAG_REL",
                               "WAIT", "DOUBLE_CLICK", "RIGHT_CLICK",
+                              "DOM_GET_TEXT", "DOM_GET_HTML", "DOM_QUERY_SELECTOR",
+                              "DOM_EXTRACT_LINKS", "DOM_CLICK", "NAVIGATE",
                               "screenshot", "get_info",
                               ]:
                 return self._handle_browser_action(action)
