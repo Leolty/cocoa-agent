@@ -35,6 +35,29 @@ __all__ = [
     "get_logger",
 ]
 
+def is_browser_action(action: Dict[str, Any]) -> bool:
+    """Check if an action is a browser-related action.
+    
+    Args:
+        action: Action dictionary
+        
+    Returns:
+        True if the action is a browser action, False otherwise
+    """
+    if not isinstance(action, dict):
+        return False
+    
+    action_type = action.get("action_type", "")
+    browser_action_types = [
+        "browser_click", "browser_type", "browser_press", "browser_key_down", "browser_key_up", "browser_hotkey",
+        "browser_scroll", "browser_move_to", "browser_move_rel", "browser_drag_to", "browser_drag_rel",
+        "browser_wait", "browser_double_click", "browser_right_click",
+        "dom_get_text", "dom_get_html", "dom_query_selector",
+        "dom_extract_links", "dom_click", "browser_navigate",
+        "browser_screenshot", "browser_get_info",
+    ]
+    return action_type in browser_action_types
+
 def normalize_action(action: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize action format by flattening parameters if present.
     
@@ -170,6 +193,12 @@ class TaskExecutor:
         last_feedback_with_image = None
         images_from_last_iteration = []  # Store images from the previous iteration only
         task_result = None  # Store task result if provided in task_complete
+        
+        # Initialize visualization data structure
+        visualization_data = {
+            "task_description": task_desc,
+            "iterations": []
+        }
 
         # Agent loop
         for iteration in range(1, max_iterations + 1):
@@ -185,6 +214,11 @@ class TaskExecutor:
             prompt_with_progress = add_progress_note(prompt, iteration)
             # Pass list of images (only from previous iteration)
             action = self.controller.call(prompt_with_progress, images_base64=images_base64)
+            
+            # Extract think content from controller
+            think_content = None
+            if hasattr(self.controller, 'get_last_think'):
+                think_content = self.controller.get_last_think()
 
             # Handle error action (parsing errors from tool calls)
             if isinstance(action, dict) and action.get("action_type") == "error":
@@ -210,18 +244,41 @@ class TaskExecutor:
                 feedbacks = []
                 done = False
                 images_from_current_iteration = []  # Collect all images from current iteration
+                iteration_actions = []  # Store actions for visualization
+                
                 for single_action in action["actions"]:
                     # Normalize action format
                     single_action = normalize_action(single_action)
                     single_feedback = self.sandbox_client.get_feedback(single_action)
-                    record_tool_feedback(single_action, single_feedback)
+                    record_tool_feedback(single_action, single_feedback) # TODO: optimize OpenAI Tool Calling format to avoid extra messages in the conversation history
                     feedbacks.append(single_feedback.get("message", ""))
+                    
+                    # For browser actions, take a screenshot after execution (unless it's already a screenshot action)
+                    screenshot_base64 = None
+                    if is_browser_action(single_action) and single_action.get("action_type") != "browser_screenshot":
+                        if hasattr(self.sandbox_client, 'take_screenshot'):
+                            try:
+                                screenshot_base64, _ = self.sandbox_client.take_screenshot()
+                                if screenshot_base64:
+                                    images_from_current_iteration.append(screenshot_base64)
+                            except Exception as e:
+                                logger.warning(f"Failed to take screenshot after browser action: {e}")
+                    
                     # Check if this action was a screenshot or image_read and has image_base64
-                    if single_action.get("action_type") in ["screenshot", "image_read"] and "image_base64" in single_feedback:
+                    if single_action.get("action_type") in ["browser_screenshot", "image_read"] and "image_base64" in single_feedback:
                         image_base64 = single_feedback["image_base64"]
                         # Collect all images from this iteration (avoid duplicates)
                         if image_base64 not in images_from_current_iteration:
                             images_from_current_iteration.append(image_base64)
+                    
+                    # Store action data for visualization
+                    action_data = {
+                        "action": single_action,
+                        "observation": single_feedback.get("message", ""),
+                        "screenshot": screenshot_base64 if screenshot_base64 else (single_feedback.get("image_base64") if single_action.get("action_type") in ["browser_screenshot", "image_read"] else None)
+                    }
+                    iteration_actions.append(action_data)
+                    
                     if single_feedback.get("done"):
                         done = True
                         break
@@ -238,15 +295,45 @@ class TaskExecutor:
                     # Store all images from this iteration for next iteration
                     images_from_last_iteration = images_from_current_iteration
                 feedback = combined_feedback
+                
+                # Store iteration data for visualization
+                visualization_data["iterations"].append({
+                    "iteration": iteration,
+                    "think": think_content,
+                    "actions": iteration_actions
+                })
             else:
                 # Single action
                 feedback = self.sandbox_client.get_feedback(action)
                 record_tool_feedback(action, feedback)
+                
+                # For browser actions, take a screenshot after execution (unless it's already a screenshot action)
+                screenshot_base64 = None
+                if is_browser_action(action) and action.get("action_type") != "browser_screenshot":
+                    if hasattr(self.sandbox_client, 'take_screenshot'):
+                        try:
+                            screenshot_base64, _ = self.sandbox_client.take_screenshot()
+                        except Exception as e:
+                            logger.warning(f"Failed to take screenshot after browser action: {e}")
+                
                 # Store images from this iteration for next iteration
                 images_from_last_iteration = []  # Reset for current iteration
-                if action.get("action_type") in ["screenshot", "image_read"] and "image_base64" in feedback:
+                if action.get("action_type") in ["browser_screenshot", "image_read"] and "image_base64" in feedback:
                     image_base64 = feedback["image_base64"]
                     images_from_last_iteration = [image_base64]  # Store single image for next iteration
+                elif screenshot_base64:
+                    images_from_last_iteration = [screenshot_base64]
+                
+                # Store iteration data for visualization
+                visualization_data["iterations"].append({
+                    "iteration": iteration,
+                    "think": think_content,
+                    "actions": [{
+                        "action": action,
+                        "observation": feedback.get("message", ""),
+                        "screenshot": screenshot_base64 if screenshot_base64 else (feedback.get("image_base64") if action.get("action_type") in ["browser_screenshot", "image_read"] else None)
+                    }]
+                })
 
             # Store the full feedback (including image_base64) for next iteration
             last_feedback_with_image = feedback
@@ -269,6 +356,7 @@ class TaskExecutor:
             "iterations": final_iteration,
             "conversation": self.controller.get_history(),
             "execution_trace": self.sandbox_client.get_history(),
+            "visualization_data": visualization_data,  # Add visualization data
         }
         
         # Add task_result if it was provided in task_complete

@@ -323,6 +323,121 @@ def get_browser_tools() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "browser_navigate",
+                "description": "Navigate the browser to a URL (DOM load).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "Destination URL to open"
+                        }
+                    },
+                    "required": ["url"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_get_text",
+                "description": "Get page text (innerText of body) via DOM, no vision required. Truncates long output.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_get_html",
+                "description": "Get full page HTML via DOM (truncated if long).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_query_selector",
+                "description": "Query elements with a CSS selector and return detailed info: tag, id, class, name, type, href, aria-label, role, text. Use this to identify precise selectors before clicking.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {
+                            "type": "string",
+                            "description": "CSS selector to query"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum elements to return (default 20)"
+                        }
+                    },
+                    "required": ["selector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_extract_links",
+                "description": "Extract hyperlinks (text + href) from the current page, optionally filtered.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filter_pattern": {
+                            "type": "string",
+                            "description": "Optional substring to filter links by href or text"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum links to return (default 50)"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dom_click",
+                "description": "Click a DOM element using a CSS selector (text-based, no coordinates).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {
+                            "type": "string",
+                            "description": "CSS selector to identify element(s) to click"
+                        },
+                        "nth": {
+                            "type": "integer",
+                            "description": "Zero-based index of the matched element to click (default 0)"
+                        },
+                        "button": {
+                            "type": "string",
+                            "enum": ["left", "right", "middle"],
+                            "description": "Mouse button to use (default left)"
+                        },
+                        "click_count": {
+                            "type": "integer",
+                            "enum": [1, 2],
+                            "description": "Number of clicks (1=click, 2=double click)"
+                        },
+                        "timeout_ms": {
+                            "type": "integer",
+                            "description": "Timeout in milliseconds for the click (default 2000)"
+                        }
+                    },
+                    "required": ["selector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "task_complete",
                 "description": "Mark the task as complete and exit. Optionally provide the final result/answer if the task requires returning a specific output (e.g., JSON answer). For tasks that generate files in the sandbox, you can omit the result parameter.",
                 "parameters": {
@@ -600,13 +715,22 @@ def get_code_tools() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "code_execute",
-                "description": "Execute Python code in Jupyter kernel and get results",
+                "description": "Execute code via sandbox runtime (python default). Returns stdout/stderr.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "code": {
                             "type": "string",
-                            "description": "Python code to execute"
+                            "description": "Source code to execute"
+                        },
+                        "language": {
+                            "type": "string",
+                            "enum": ["python", "javascript"],
+                            "description": "Runtime language (default python)"
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Optional timeout in seconds"
                         }
                     },
                     "required": ["code"]
@@ -739,6 +863,12 @@ def map_tool_call_to_action(tool_name: str, arguments: Dict[str, Any]) -> Dict[s
         "browser_right_click": {"x", "y"},
         "browser_screenshot": set(),
         "browser_get_info": set(),
+        "browser_navigate": {"url"},
+        "dom_get_text": set(),
+        "dom_get_html": set(),
+        "dom_query_selector": {"selector", "limit"},
+        "dom_extract_links": {"filter_pattern", "limit"},
+        "dom_click": {"selector", "nth", "button", "click_count", "timeout_ms"},
         "file_read": {"path"},
         "file_write": {"path", "content"},
         "file_list": {"path"},
@@ -749,7 +879,7 @@ def map_tool_call_to_action(tool_name: str, arguments: Dict[str, Any]) -> Dict[s
         "file_download": {"path"},
         "image_read": {"path"},
         "str_replace_editor": {"command", "path", "file_text", "old_str", "new_str", "insert_line", "view_range"},
-        "code_execute": {"code"},
+        "code_execute": {"code", "language", "timeout"},
         "shell_execute": {"command"},
         "task_complete": {"result"},
     }
@@ -767,57 +897,13 @@ def map_tool_call_to_action(tool_name: str, arguments: Dict[str, Any]) -> Dict[s
         # Filter to only valid parameters (in case of typos or extra params)
         arguments = {k: v for k, v in arguments.items() if k in valid_params}
     
-    # Map tool names to action types
-    tool_to_action_map = {
-        # Browser tools
-        "browser_click": "CLICK",
-        "browser_type": "TYPING",
-        "browser_press": "PRESS",
-        "browser_scroll": "SCROLL",
-        "browser_move_to": "MOVE_TO",
-        "browser_move_rel": "MOVE_REL",
-        "browser_drag_to": "DRAG_TO",
-        "browser_drag_rel": "DRAG_REL",
-        "browser_hotkey": "HOTKEY",
-        "browser_key_down": "KEY_DOWN",
-        "browser_key_up": "KEY_UP",
-        "browser_wait": "WAIT",
-        "browser_double_click": "DOUBLE_CLICK",
-        "browser_right_click": "RIGHT_CLICK",
-        "browser_screenshot": "screenshot",
-        "browser_get_info": "get_info",
-        # File tools
-        "file_read": "file_read",
-        "file_write": "file_write",
-        "file_list": "file_list",
-        "replace_in_file": "replace_in_file",
-        "search_in_file": "search_in_file",
-        "find_files": "find_files",
-        "file_upload": "file_upload",
-        "file_download": "file_download",
-        "image_read": "image_read",
-        "str_replace_editor": "str_replace_editor",
-        # Code tools
-        "code_execute": "code_execute",
-        # Shell tools
-        "shell_execute": "shell_execute",
-        # Common
-        "task_complete": "exit"
-    }
-    
-    action_type = tool_to_action_map.get(tool_name)
-    if not action_type:
+    # Validate that tool_name is known
+    valid_tools = set(tool_valid_params.keys())
+    if tool_name not in valid_tools:
         raise ValueError(f"Unknown tool: {tool_name}")
     
-    # Handle special actions
-    if action_type == "exit":
-        return {"action_type": "exit"}
-    
-    if action_type == "screenshot":
-        return {"action_type": "screenshot"}
-    
-    # Build action with arguments
-    action = {"action_type": action_type}
+    # Build action with tool name as action_type (no mapping needed)
+    action = {"action_type": tool_name}
     action.update(arguments)
     
     return action

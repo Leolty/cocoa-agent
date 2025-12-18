@@ -275,68 +275,68 @@ class BrowserSandboxClient(SandboxClient):
         """
         action_type = action_data.get("action_type")
         
-        if action_type == "CLICK":
+        if action_type == "browser_click":
             return Action_Click(
                 x=action_data.get("x"),
                 y=action_data.get("y"),
                 button=action_data.get("button", "left"),
                 num_clicks=action_data.get("num_clicks", 1)
             )
-        elif action_type == "TYPING":
+        elif action_type == "browser_type":
             return Action_Typing(
                 text=action_data.get("text"),
                 use_clipboard=action_data.get("use_clipboard", True)
             )
-        elif action_type == "PRESS":
+        elif action_type == "browser_press":
             # Convert key to lowercase for API compatibility
             key = action_data.get("key", "")
             return Action_Press(key=key.lower() if isinstance(key, str) else key)
-        elif action_type == "KEY_DOWN":
+        elif action_type == "browser_key_down":
             # Convert key to lowercase for API compatibility
             key = action_data.get("key", "")
             return Action_KeyDown(key=key.lower() if isinstance(key, str) else key)
-        elif action_type == "KEY_UP":
+        elif action_type == "browser_key_up":
             # Convert key to lowercase for API compatibility
             key = action_data.get("key", "")
             return Action_KeyUp(key=key.lower() if isinstance(key, str) else key)
-        elif action_type == "HOTKEY":
+        elif action_type == "browser_hotkey":
             # Convert all keys to lowercase for API compatibility
             keys = action_data.get("keys", [])
             keys_lower = [k.lower() if isinstance(k, str) else k for k in keys]
             return Action_Hotkey(keys=keys_lower)
-        elif action_type == "SCROLL":
+        elif action_type == "browser_scroll":
             return Action_Scroll(
                 dx=action_data.get("dx", 0),
                 dy=action_data.get("dy", 0)
             )
-        elif action_type == "MOVE_TO":
+        elif action_type == "browser_move_to":
             return Action_MoveTo(
                 x=action_data.get("x"),
                 y=action_data.get("y")
             )
-        elif action_type == "MOVE_REL":
+        elif action_type == "browser_move_rel":
             return Action_MoveRel(
                 x_offset=action_data.get("x_offset"),
                 y_offset=action_data.get("y_offset")
             )
-        elif action_type == "DRAG_TO":
+        elif action_type == "browser_drag_to":
             return Action_DragTo(
                 x=action_data.get("x"),
                 y=action_data.get("y")
             )
-        elif action_type == "DRAG_REL":
+        elif action_type == "browser_drag_rel":
             return Action_DragRel(
                 x_offset=action_data.get("x_offset"),
                 y_offset=action_data.get("y_offset")
             )
-        elif action_type == "WAIT":
+        elif action_type == "browser_wait":
             return Action_Wait(duration=action_data.get("duration"))
-        elif action_type == "DOUBLE_CLICK":
+        elif action_type == "browser_double_click":
             return Action_DoubleClick(
                 x=action_data.get("x"),
                 y=action_data.get("y")
             )
-        elif action_type == "RIGHT_CLICK":
+        elif action_type == "browser_right_click":
             return Action_RightClick(
                 x=action_data.get("x"),
                 y=action_data.get("y")
@@ -363,6 +363,15 @@ class BrowserSandboxClient(SandboxClient):
         except Exception as e:
             logger.error(f"Failed to take screenshot: {e}")
             return "", f"Failed to take screenshot: {str(e)}"
+    
+    def take_screenshot(self) -> tuple[str, str]:
+        """Public method to take a screenshot for visualization.
+        
+        Returns:
+            Tuple of (base64_encoded_image, status_message)
+        """
+        self._initialize_sdk_client()
+        return self._take_screenshot()
     
     def _get_browser_info(self) -> str:
         """Get browser information including CDP URL and viewport.
@@ -406,10 +415,252 @@ class BrowserSandboxClient(SandboxClient):
             
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(run_in_thread)
-                return future.result(timeout=30)
+                return future.result(timeout=60)  # Increased timeout for complex pages
         except RuntimeError:
             # No running event loop, use asyncio.run()
             return asyncio.run(coro)
+
+    def _with_page(self, func, wait_timeout: int = 5000):
+        """Connect to the running browser via CDP and run an async function on the active page.
+        
+        Args:
+            func: Async function that takes a page and returns a result
+            wait_timeout: Timeout in ms for waiting for page load (default 5000ms, use 0 to skip wait)
+        """
+        import asyncio
+        from playwright.async_api import async_playwright
+
+        async def runner():
+            browser_info = self.sdk_client.browser.get_info().data
+            async with async_playwright() as p:
+                browser = await p.chromium.connect_over_cdp(browser_info.cdp_url)
+                try:
+                    context = browser.contexts[0] if browser.contexts else await browser.new_context()
+                    page = context.pages[0] if context.pages else await context.new_page()
+                    # Use shorter timeout for DOM operations on already-loaded pages
+                    if wait_timeout > 0:
+                        try:
+                            await page.wait_for_load_state("domcontentloaded", timeout=wait_timeout)
+                        except Exception:
+                            # If page is already loaded or timeout, continue anyway
+                            pass
+                    return await func(page)
+                finally:
+                    # Closing the Playwright client disconnects but does not shut down the remote browser
+                    await browser.close()
+
+        return self._run_async(runner())
+
+    def _dom_get_text(self, max_chars: int = 8000) -> str:
+        """Return page text (innerText of body)."""
+        try:
+            async def op(page):
+                return await page.inner_text("body")
+
+            text = self._with_page(lambda page: op(page), wait_timeout=5000)
+            if text is None:
+                return "Page text is empty."
+            if len(text) > max_chars:
+                text = text[:max_chars] + "\n... (truncated)"
+            return f"Page text content:\n{text}"
+        except Exception as e:
+            logger.error(f"Failed to get page text: {e}")
+            return f"Failed to get page text: {str(e)}"
+
+    def _dom_get_html(self, max_chars: int = 12000) -> str:
+        """Return page HTML (page.content)."""
+        try:
+            async def op(page):
+                return await page.content()
+
+            html = self._with_page(lambda page: op(page), wait_timeout=5000)
+            if html is None:
+                return "Page HTML is empty."
+            if len(html) > max_chars:
+                html = html[:max_chars] + "\n... (truncated)"
+            return f"Page HTML content:\n{html}"
+        except Exception as e:
+            logger.error(f"Failed to get page HTML: {e}")
+            return f"Failed to get page HTML: {str(e)}"
+
+    def _dom_query_selector(self, selector: str, limit: int = 20) -> str:
+        """Query elements via CSS selector and summarize tag/text/href/class/id/name for precise selection."""
+        try:
+            async def op(page):
+                elements = await page.query_selector_all(selector)
+                results = []
+                for i, element in enumerate(elements[:limit]):
+                    try:
+                        text = await element.inner_text()
+                    except Exception:
+                        text = ""
+                    try:
+                        tag = await element.evaluate("el => el.tagName")
+                    except Exception:
+                        tag = "UNKNOWN"
+                    # Get key attributes for precise selection
+                    attrs = {}
+                    for attr_name in ["id", "class", "name", "type", "href", "role", "aria-label"]:
+                        try:
+                            val = await element.get_attribute(attr_name)
+                            if val:
+                                attrs[attr_name] = val
+                        except Exception:
+                            pass
+                    
+                    # Build info string
+                    info_parts = [f"{i+1}. <{tag}>"]
+                    
+                    # Add id if present (most specific)
+                    if "id" in attrs:
+                        info_parts.append(f"id=\"{attrs['id']}\"")
+                    
+                    # Add class if present
+                    if "class" in attrs:
+                        # Truncate long class lists
+                        class_val = attrs["class"]
+                        if len(class_val) > 100:
+                            class_val = class_val[:100] + "..."
+                        info_parts.append(f"class=\"{class_val}\"")
+                    
+                    # Add name if present
+                    if "name" in attrs:
+                        info_parts.append(f"name=\"{attrs['name']}\"")
+                    
+                    # Add type if present (for inputs)
+                    if "type" in attrs:
+                        info_parts.append(f"type=\"{attrs['type']}\"")
+                    
+                    # Add href if present
+                    if "href" in attrs:
+                        href_val = attrs["href"]
+                        if len(href_val) > 80:
+                            href_val = href_val[:80] + "..."
+                        info_parts.append(f"href=\"{href_val}\"")
+                    
+                    # Add aria-label if present (accessibility)
+                    if "aria-label" in attrs:
+                        aria_val = attrs["aria-label"]
+                        if len(aria_val) > 60:
+                            aria_val = aria_val[:60] + "..."
+                        info_parts.append(f"aria-label=\"{aria_val}\"")
+                    
+                    # Add role if present
+                    if "role" in attrs:
+                        info_parts.append(f"role=\"{attrs['role']}\"")
+                    
+                    # Add text snippet (truncated)
+                    if text:
+                        snippet = text[:150].replace("\n", " ").strip()
+                        if len(text) > 150:
+                            snippet += "..."
+                        info_parts.append(f"text=\"{snippet}\"")
+                    
+                    results.append(" ".join(info_parts))
+                
+                extra = ""
+                if len(elements) > limit:
+                    extra = f"\n... and {len(elements) - limit} more elements"
+                return f"Found {len(elements)} element(s) matching selector '{selector}':\n" + "\n".join(results) + extra
+
+            return self._with_page(lambda page: op(page), wait_timeout=5000)
+        except Exception as e:
+            logger.error(f"Failed to query selector: {e}")
+            return f"Failed to query selector: {str(e)}"
+
+    def _dom_extract_links(self, filter_pattern: str | None = None, limit: int = 50) -> str:
+        """Extract links from page, optionally filtered by substring."""
+        try:
+            async def op(page):
+                links = await page.evaluate(
+                    """(pattern) => {
+                        const patt = pattern ? pattern.toLowerCase() : null;
+                        return Array.from(document.querySelectorAll('a[href]')).map((a, idx) => {
+                            const text = (a.innerText || '').trim();
+                            const href = a.href || '';
+                            const title = a.title || '';
+                            const keep = !patt || href.toLowerCase().includes(patt) || text.toLowerCase().includes(patt);
+                            return {text, href, title, keep};
+                        }).filter(l => l.keep);
+                    }""",
+                    filter_pattern,
+                )
+                summary = []
+                for i, link in enumerate(links[:limit]):
+                    label = link["text"][:80].replace("\n", " ")
+                    summary.append(f"{i+1}. {label} -> {link['href']}")
+                extra = ""
+                if len(links) > limit:
+                    extra = f"\n... and {len(links) - limit} more links"
+                header = f"Found {len(links)} link(s)" + (
+                    f" matching '{filter_pattern}'" if filter_pattern else ""
+                )
+                return header + (":\n" + "\n".join(summary) if summary else "")
+
+            return self._with_page(lambda page: op(page), wait_timeout=5000)
+        except Exception as e:
+            logger.error(f"Failed to extract links: {e}")
+            return f"Failed to extract links: {str(e)}"
+
+    def _dom_click(
+        self,
+        selector: str,
+        nth: int = 0,
+        button: str = "left",
+        click_count: int = 1,
+        timeout_ms: int = 2000,
+    ) -> str:
+        """Click a DOM element using a CSS selector (and optional index)."""
+        try:
+            async def op(page):
+                elements = await page.query_selector_all(selector)
+                if not elements:
+                    return f"No element found for selector '{selector}'"
+                idx = min(max(nth, 0), len(elements) - 1)
+                target = elements[idx]
+                await target.scroll_into_view_if_needed(timeout=timeout_ms)
+                await target.click(
+                    button=button,
+                    click_count=click_count,
+                    timeout=timeout_ms,
+                    force=True,
+                )
+                try:
+                    text = await target.inner_text()
+                    text = text.strip().replace("\n", " ")
+                except Exception:
+                    text = ""
+                return f"Clicked element {idx+1}/{len(elements)} matching '{selector}' (button={button}, clicks={click_count}). Text: {text[:120]}"
+
+            return self._with_page(lambda page: op(page), wait_timeout=5000)
+        except Exception as e:
+            logger.error(f"Failed to click selector: {e}")
+            return f"Failed to click selector: {str(e)}"
+
+    def _navigate_to_url(self, url: str) -> str:
+        """Navigate browser to a URL via CDP + Playwright."""
+        if not url:
+            raise ValueError("browser_navigate requires 'url' parameter")
+        try:
+            from playwright.async_api import async_playwright
+
+            async def op():
+                browser_info = self.sdk_client.browser.get_info().data
+                async with async_playwright() as p:
+                    browser = await p.chromium.connect_over_cdp(browser_info.cdp_url)
+                    try:
+                        context = browser.contexts[0] if browser.contexts else await browser.new_context()
+                        page = context.pages[0] if context.pages else await context.new_page()
+                        await page.goto(url, wait_until="domcontentloaded")
+                        return f"Successfully navigated to {url}"
+                    finally:
+                        await browser.close()
+
+            return self._run_async(op())
+        except Exception as e:
+            logger.error(f"Failed to navigate: {e}")
+            logger.exception("Full traceback:")
+            return f"Failed to navigate: {str(e)}"
 
     def get_feedback(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """Get feedback from executing a browser action.
@@ -423,8 +674,8 @@ class BrowserSandboxClient(SandboxClient):
         # Initialize SDK client if not already done
         self._initialize_sdk_client()
 
-        # Handle exit action
-        if action.get("action_type") == "exit" or action.get("command") == "exit" or action.get("action_type") == "task_complete":
+        # Handle task_complete action
+        if action.get("action_type") == "task_complete" or action.get("command") == "exit" or action.get("action_type") == "exit":
             logger.debug("Task completed")
             result_text = action.get("result")
             if result_text:
@@ -446,8 +697,63 @@ class BrowserSandboxClient(SandboxClient):
             })
             return feedback
 
+        # DOM-based actions (selector/text-based, no coordinates)
+        if action.get("action_type") == "dom_get_text":
+            message = self._dom_get_text()
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "dom_get_html":
+            message = self._dom_get_html()
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "dom_query_selector":
+            selector = action.get("selector")
+            limit = action.get("limit", 20)
+            if not selector:
+                feedback = {"done": False, "message": "selector is required for dom_query_selector"}
+            else:
+                message = self._dom_query_selector(selector, limit=limit)
+                feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "dom_extract_links":
+            pattern = action.get("filter_pattern")
+            limit = action.get("limit", 50)
+            message = self._dom_extract_links(filter_pattern=pattern, limit=limit)
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "dom_click":
+            selector = action.get("selector")
+            if not selector:
+                feedback = {"done": False, "message": "selector is required for dom_click"}
+            else:
+                message = self._dom_click(
+                    selector=selector,
+                    nth=action.get("nth", 0),
+                    button=action.get("button", "left"),
+                    click_count=action.get("click_count", 1),
+                    timeout_ms=action.get("timeout_ms", 2000),
+                )
+                feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
+        if action.get("action_type") == "browser_navigate":
+            url = action.get("url")
+            message = self._navigate_to_url(url)
+            feedback = {"done": False, "message": message}
+            self.execution_history.append({"action": action, "feedback": feedback})
+            return feedback
+
         # Handle screenshot action
-        if action.get("action_type") == "screenshot":
+        if action.get("action_type") == "browser_screenshot":
             base64_image, message = self._take_screenshot()
             feedback = {
                 "done": False,
@@ -464,7 +770,7 @@ class BrowserSandboxClient(SandboxClient):
             return feedback
 
         # Handle get_info action
-        if action.get("action_type") == "get_info":
+        if action.get("action_type") == "browser_get_info":
             message = self._get_browser_info()
             feedback = {
                 "done": False,
@@ -581,8 +887,8 @@ class UnifiedSandboxClient(SandboxClient):
         
         action_type = action.get("action_type")
         
-        # Handle exit action (task_complete is mapped to exit in tools.py, but models may return task_complete directly)
-        if action_type == "exit" or action_type == "task_complete":
+        # Handle task_complete action
+        if action_type == "task_complete" or action_type == "exit":
             logger.debug("Task completed")
             result_text = action.get("result")
             if result_text:
@@ -604,10 +910,12 @@ class UnifiedSandboxClient(SandboxClient):
         # Route to appropriate handler based on action type
         try:
             # Browser actions
-            if action_type in ["CLICK", "TYPING", "PRESS", "KEY_DOWN", "KEY_UP", "HOTKEY",
-                              "SCROLL", "MOVE_TO", "MOVE_REL", "DRAG_TO", "DRAG_REL",
-                              "WAIT", "DOUBLE_CLICK", "RIGHT_CLICK",
-                              "screenshot", "get_info",
+            if action_type in ["browser_click", "browser_type", "browser_press", "browser_key_down", "browser_key_up", "browser_hotkey",
+                              "browser_scroll", "browser_move_to", "browser_move_rel", "browser_drag_to", "browser_drag_rel",
+                              "browser_wait", "browser_double_click", "browser_right_click",
+                              "dom_get_text", "dom_get_html", "dom_query_selector",
+                              "dom_extract_links", "dom_click", "browser_navigate",
+                              "browser_screenshot", "browser_get_info",
                               ]:
                 return self._handle_browser_action(action)
             
@@ -637,6 +945,27 @@ class UnifiedSandboxClient(SandboxClient):
             feedback = {"done": False, "message": f"Error: {str(e)}"}
             self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
+    
+    def take_screenshot(self) -> tuple[str, str]:
+        """Take a screenshot and return base64 encoded string and status message.
+        
+        Returns:
+            Tuple of (base64_encoded_image, status_message)
+        """
+        self._initialize_sdk_client()
+        try:
+            import base64
+            screenshot_data = b""
+            for chunk in self.sdk_client.browser.screenshot():
+                screenshot_data += chunk
+            
+            # Encode to base64
+            base64_image = base64.b64encode(screenshot_data).decode('utf-8')
+            status_message = f"Screenshot taken successfully ({len(screenshot_data)} bytes)"
+            return base64_image, status_message
+        except Exception as e:
+            logger.error(f"Failed to take screenshot: {e}")
+            return "", f"Failed to take screenshot: {str(e)}"
     
     def _handle_browser_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """Handle browser-specific actions."""
@@ -835,22 +1164,30 @@ class UnifiedSandboxClient(SandboxClient):
             code = action.get("code")
             if not code:
                 raise ValueError("code_execute requires 'code' parameter")
-            result = self.sdk_client.jupyter.execute_code(
+            language = action.get("language", "python")
+            timeout = action.get("timeout")
+
+            result = self.sdk_client.code.execute_code(
+                language=language,
                 code=code,
-                session_id=self.jupyter_session_id,
-                kernel_name="python3"
+                timeout=timeout,
             )
 
-            # Extract outputs
-            outputs = []
-            for output in result.data.outputs:
-                if hasattr(output, 'text') and output.text:
-                    outputs.append(output.text)
-                elif hasattr(output, 'data') and output.data:
-                    outputs.append(str(output.data))
-            
-            message = "\n".join(outputs) if outputs else "Code executed successfully (no output)"
-            
+            # result.data is CodeExecuteResponse
+            data = result.data
+            parts = []
+            if data.stdout:
+                parts.append(data.stdout.rstrip())
+            if data.stderr:
+                parts.append(f"[stderr]\n{data.stderr.rstrip()}")
+            if data.outputs:
+                try:
+                    parts.append(json.dumps(data.outputs, indent=2))
+                except Exception:
+                    parts.append(str(data.outputs))
+
+            message = "\n".join([p for p in parts if p]) or f"Code executed: status={data.status}"
+
             feedback = {"done": False, "message": message}
             self.execution_history.append({"action": action, "feedback": feedback})
             logger.debug(f"Feedback (OBSERVATION): \n{colorize(json.dumps(feedback, indent=2), 'YELLOW')}")
