@@ -8,25 +8,11 @@
 </p>
 
 <p align="center">
-  <a href="https://cocoabench.github.io/">
-    <img src="https://img.shields.io/badge/Website-3E2723?style=flat&logo=safari&logoColor=white" alt="Website">
-  </a>
-  &nbsp;
-  <a href="https://cocoabench.github.io/blog.html">
-    <img src="https://img.shields.io/badge/Blog-5D4037?style=flat&logo=hashnode&logoColor=white" alt="Blog">
-  </a>
-  &nbsp;
-  <a href="https://cocoabench.github.io/leaderboard.html">
-    <img src="https://img.shields.io/badge/Leaderboard-795548?style=flat&logo=target&logoColor=white" alt="Leaderboard">
-  </a>
-  &nbsp;
-  <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/Python_3.13+-8D6E63?style=flat&logo=python&logoColor=white" alt="Python">
-  </a>
-  &nbsp;
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/MIT_License-A1887F?style=flat&logo=opensourceinitiative&logoColor=white" alt="License">
-  </a>
+  [![Website](https://img.shields.io/badge/🌐_Website-3E2723?style=flat)](https://cocoabench.github.io/)
+  [![Blog](https://img.shields.io/badge/📝_Blog-5D4037?style=flat)](https://cocoabench.github.io/blog.html)
+  [![Leaderboard](https://img.shields.io/badge/🏆_Leaderboard-795548?style=flat)](https://cocoabench.github.io/leaderboard.html)
+  [![Python](https://img.shields.io/badge/🐍_Python_3.13+-8D6E63?style=flat)](https://www.python.org/)
+  [![License](https://img.shields.io/badge/📄_MIT_License-A1887F?style=flat)](LICENSE)
 </p>
 
 <br>
