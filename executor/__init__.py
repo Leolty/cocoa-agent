@@ -49,12 +49,12 @@ def is_browser_action(action: Dict[str, Any]) -> bool:
     
     action_type = action.get("action_type", "")
     browser_action_types = [
-        "CLICK", "TYPING", "PRESS", "KEY_DOWN", "KEY_UP", "HOTKEY",
-        "SCROLL", "MOVE_TO", "MOVE_REL", "DRAG_TO", "DRAG_REL",
-        "WAIT", "DOUBLE_CLICK", "RIGHT_CLICK",
-        "DOM_GET_TEXT", "DOM_GET_HTML", "DOM_QUERY_SELECTOR",
-        "DOM_EXTRACT_LINKS", "DOM_CLICK", "NAVIGATE",
-        "screenshot", "get_info",
+        "browser_click", "browser_type", "browser_press", "browser_key_down", "browser_key_up", "browser_hotkey",
+        "browser_scroll", "browser_move_to", "browser_move_rel", "browser_drag_to", "browser_drag_rel",
+        "browser_wait", "browser_double_click", "browser_right_click",
+        "dom_get_text", "dom_get_html", "dom_query_selector",
+        "dom_extract_links", "dom_click", "browser_navigate",
+        "browser_screenshot", "browser_get_info",
     ]
     return action_type in browser_action_types
 
@@ -255,7 +255,7 @@ class TaskExecutor:
                     
                     # For browser actions, take a screenshot after execution (unless it's already a screenshot action)
                     screenshot_base64 = None
-                    if is_browser_action(single_action) and single_action.get("action_type") != "screenshot":
+                    if is_browser_action(single_action) and single_action.get("action_type") != "browser_screenshot":
                         if hasattr(self.sandbox_client, 'take_screenshot'):
                             try:
                                 screenshot_base64, _ = self.sandbox_client.take_screenshot()
@@ -265,7 +265,7 @@ class TaskExecutor:
                                 logger.warning(f"Failed to take screenshot after browser action: {e}")
                     
                     # Check if this action was a screenshot or image_read and has image_base64
-                    if single_action.get("action_type") in ["screenshot", "image_read"] and "image_base64" in single_feedback:
+                    if single_action.get("action_type") in ["browser_screenshot", "image_read"] and "image_base64" in single_feedback:
                         image_base64 = single_feedback["image_base64"]
                         # Collect all images from this iteration (avoid duplicates)
                         if image_base64 not in images_from_current_iteration:
@@ -275,7 +275,7 @@ class TaskExecutor:
                     action_data = {
                         "action": single_action,
                         "observation": single_feedback.get("message", ""),
-                        "screenshot": screenshot_base64 if screenshot_base64 else (single_feedback.get("image_base64") if single_action.get("action_type") in ["screenshot", "image_read"] else None)
+                        "screenshot": screenshot_base64 if screenshot_base64 else (single_feedback.get("image_base64") if single_action.get("action_type") in ["browser_screenshot", "image_read"] else None)
                     }
                     iteration_actions.append(action_data)
                     
@@ -309,7 +309,7 @@ class TaskExecutor:
                 
                 # For browser actions, take a screenshot after execution (unless it's already a screenshot action)
                 screenshot_base64 = None
-                if is_browser_action(action) and action.get("action_type") != "screenshot":
+                if is_browser_action(action) and action.get("action_type") != "browser_screenshot":
                     if hasattr(self.sandbox_client, 'take_screenshot'):
                         try:
                             screenshot_base64, _ = self.sandbox_client.take_screenshot()
@@ -318,7 +318,7 @@ class TaskExecutor:
                 
                 # Store images from this iteration for next iteration
                 images_from_last_iteration = []  # Reset for current iteration
-                if action.get("action_type") in ["screenshot", "image_read"] and "image_base64" in feedback:
+                if action.get("action_type") in ["browser_screenshot", "image_read"] and "image_base64" in feedback:
                     image_base64 = feedback["image_base64"]
                     images_from_last_iteration = [image_base64]  # Store single image for next iteration
                 elif screenshot_base64:
@@ -331,7 +331,7 @@ class TaskExecutor:
                     "actions": [{
                         "action": action,
                         "observation": feedback.get("message", ""),
-                        "screenshot": screenshot_base64 if screenshot_base64 else (feedback.get("image_base64") if action.get("action_type") in ["screenshot", "image_read"] else None)
+                        "screenshot": screenshot_base64 if screenshot_base64 else (feedback.get("image_base64") if action.get("action_type") in ["browser_screenshot", "image_read"] else None)
                     }]
                 })
 

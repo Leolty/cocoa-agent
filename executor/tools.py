@@ -897,63 +897,13 @@ def map_tool_call_to_action(tool_name: str, arguments: Dict[str, Any]) -> Dict[s
         # Filter to only valid parameters (in case of typos or extra params)
         arguments = {k: v for k, v in arguments.items() if k in valid_params}
     
-    # Map tool names to action types
-    tool_to_action_map = {
-        # Browser tools
-        "browser_click": "CLICK",
-        "browser_type": "TYPING",
-        "browser_press": "PRESS",
-        "browser_scroll": "SCROLL",
-        "browser_move_to": "MOVE_TO",
-        "browser_move_rel": "MOVE_REL",
-        "browser_drag_to": "DRAG_TO",
-        "browser_drag_rel": "DRAG_REL",
-        "browser_hotkey": "HOTKEY",
-        "browser_key_down": "KEY_DOWN",
-        "browser_key_up": "KEY_UP",
-        "browser_wait": "WAIT",
-        "browser_double_click": "DOUBLE_CLICK",
-        "browser_right_click": "RIGHT_CLICK",
-        "browser_screenshot": "screenshot",
-        "browser_get_info": "get_info",
-        "browser_navigate": "NAVIGATE",
-        "dom_get_text": "DOM_GET_TEXT",
-        "dom_get_html": "DOM_GET_HTML",
-        "dom_query_selector": "DOM_QUERY_SELECTOR",
-        "dom_extract_links": "DOM_EXTRACT_LINKS",
-        "dom_click": "DOM_CLICK",
-        # File tools
-        "file_read": "file_read",
-        "file_write": "file_write",
-        "file_list": "file_list",
-        "replace_in_file": "replace_in_file",
-        "search_in_file": "search_in_file",
-        "find_files": "find_files",
-        "file_upload": "file_upload",
-        "file_download": "file_download",
-        "image_read": "image_read",
-        "str_replace_editor": "str_replace_editor",
-        # Code tools
-        "code_execute": "code_execute",
-        # Shell tools
-        "shell_execute": "shell_execute",
-        # Common
-        "task_complete": "exit"
-    }
-    
-    action_type = tool_to_action_map.get(tool_name)
-    if not action_type:
+    # Validate that tool_name is known
+    valid_tools = set(tool_valid_params.keys())
+    if tool_name not in valid_tools:
         raise ValueError(f"Unknown tool: {tool_name}")
     
-    # Handle special actions
-    if action_type == "exit":
-        return {"action_type": "exit"}
-    
-    if action_type == "screenshot":
-        return {"action_type": "screenshot"}
-    
-    # Build action with arguments
-    action = {"action_type": action_type}
+    # Build action with tool name as action_type (no mapping needed)
+    action = {"action_type": tool_name}
     action.update(arguments)
     
     return action

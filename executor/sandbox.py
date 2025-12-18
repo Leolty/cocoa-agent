@@ -275,68 +275,68 @@ class BrowserSandboxClient(SandboxClient):
         """
         action_type = action_data.get("action_type")
         
-        if action_type == "CLICK":
+        if action_type == "browser_click":
             return Action_Click(
                 x=action_data.get("x"),
                 y=action_data.get("y"),
                 button=action_data.get("button", "left"),
                 num_clicks=action_data.get("num_clicks", 1)
             )
-        elif action_type == "TYPING":
+        elif action_type == "browser_type":
             return Action_Typing(
                 text=action_data.get("text"),
                 use_clipboard=action_data.get("use_clipboard", True)
             )
-        elif action_type == "PRESS":
+        elif action_type == "browser_press":
             # Convert key to lowercase for API compatibility
             key = action_data.get("key", "")
             return Action_Press(key=key.lower() if isinstance(key, str) else key)
-        elif action_type == "KEY_DOWN":
+        elif action_type == "browser_key_down":
             # Convert key to lowercase for API compatibility
             key = action_data.get("key", "")
             return Action_KeyDown(key=key.lower() if isinstance(key, str) else key)
-        elif action_type == "KEY_UP":
+        elif action_type == "browser_key_up":
             # Convert key to lowercase for API compatibility
             key = action_data.get("key", "")
             return Action_KeyUp(key=key.lower() if isinstance(key, str) else key)
-        elif action_type == "HOTKEY":
+        elif action_type == "browser_hotkey":
             # Convert all keys to lowercase for API compatibility
             keys = action_data.get("keys", [])
             keys_lower = [k.lower() if isinstance(k, str) else k for k in keys]
             return Action_Hotkey(keys=keys_lower)
-        elif action_type == "SCROLL":
+        elif action_type == "browser_scroll":
             return Action_Scroll(
                 dx=action_data.get("dx", 0),
                 dy=action_data.get("dy", 0)
             )
-        elif action_type == "MOVE_TO":
+        elif action_type == "browser_move_to":
             return Action_MoveTo(
                 x=action_data.get("x"),
                 y=action_data.get("y")
             )
-        elif action_type == "MOVE_REL":
+        elif action_type == "browser_move_rel":
             return Action_MoveRel(
                 x_offset=action_data.get("x_offset"),
                 y_offset=action_data.get("y_offset")
             )
-        elif action_type == "DRAG_TO":
+        elif action_type == "browser_drag_to":
             return Action_DragTo(
                 x=action_data.get("x"),
                 y=action_data.get("y")
             )
-        elif action_type == "DRAG_REL":
+        elif action_type == "browser_drag_rel":
             return Action_DragRel(
                 x_offset=action_data.get("x_offset"),
                 y_offset=action_data.get("y_offset")
             )
-        elif action_type == "WAIT":
+        elif action_type == "browser_wait":
             return Action_Wait(duration=action_data.get("duration"))
-        elif action_type == "DOUBLE_CLICK":
+        elif action_type == "browser_double_click":
             return Action_DoubleClick(
                 x=action_data.get("x"),
                 y=action_data.get("y")
             )
-        elif action_type == "RIGHT_CLICK":
+        elif action_type == "browser_right_click":
             return Action_RightClick(
                 x=action_data.get("x"),
                 y=action_data.get("y")
@@ -674,8 +674,8 @@ class BrowserSandboxClient(SandboxClient):
         # Initialize SDK client if not already done
         self._initialize_sdk_client()
 
-        # Handle exit action
-        if action.get("action_type") == "exit" or action.get("command") == "exit" or action.get("action_type") == "task_complete":
+        # Handle task_complete action
+        if action.get("action_type") == "task_complete" or action.get("command") == "exit" or action.get("action_type") == "exit":
             logger.debug("Task completed")
             result_text = action.get("result")
             if result_text:
@@ -698,19 +698,19 @@ class BrowserSandboxClient(SandboxClient):
             return feedback
 
         # DOM-based actions (selector/text-based, no coordinates)
-        if action.get("action_type") == "DOM_GET_TEXT":
+        if action.get("action_type") == "dom_get_text":
             message = self._dom_get_text()
             feedback = {"done": False, "message": message}
             self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
 
-        if action.get("action_type") == "DOM_GET_HTML":
+        if action.get("action_type") == "dom_get_html":
             message = self._dom_get_html()
             feedback = {"done": False, "message": message}
             self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
 
-        if action.get("action_type") == "DOM_QUERY_SELECTOR":
+        if action.get("action_type") == "dom_query_selector":
             selector = action.get("selector")
             limit = action.get("limit", 20)
             if not selector:
@@ -721,7 +721,7 @@ class BrowserSandboxClient(SandboxClient):
             self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
 
-        if action.get("action_type") == "DOM_EXTRACT_LINKS":
+        if action.get("action_type") == "dom_extract_links":
             pattern = action.get("filter_pattern")
             limit = action.get("limit", 50)
             message = self._dom_extract_links(filter_pattern=pattern, limit=limit)
@@ -729,7 +729,7 @@ class BrowserSandboxClient(SandboxClient):
             self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
 
-        if action.get("action_type") == "DOM_CLICK":
+        if action.get("action_type") == "dom_click":
             selector = action.get("selector")
             if not selector:
                 feedback = {"done": False, "message": "selector is required for dom_click"}
@@ -745,7 +745,7 @@ class BrowserSandboxClient(SandboxClient):
             self.execution_history.append({"action": action, "feedback": feedback})
             return feedback
 
-        if action.get("action_type") == "NAVIGATE":
+        if action.get("action_type") == "browser_navigate":
             url = action.get("url")
             message = self._navigate_to_url(url)
             feedback = {"done": False, "message": message}
@@ -753,7 +753,7 @@ class BrowserSandboxClient(SandboxClient):
             return feedback
 
         # Handle screenshot action
-        if action.get("action_type") == "screenshot":
+        if action.get("action_type") == "browser_screenshot":
             base64_image, message = self._take_screenshot()
             feedback = {
                 "done": False,
@@ -770,7 +770,7 @@ class BrowserSandboxClient(SandboxClient):
             return feedback
 
         # Handle get_info action
-        if action.get("action_type") == "get_info":
+        if action.get("action_type") == "browser_get_info":
             message = self._get_browser_info()
             feedback = {
                 "done": False,
@@ -887,8 +887,8 @@ class UnifiedSandboxClient(SandboxClient):
         
         action_type = action.get("action_type")
         
-        # Handle exit action (task_complete is mapped to exit in tools.py, but models may return task_complete directly)
-        if action_type == "exit" or action_type == "task_complete":
+        # Handle task_complete action
+        if action_type == "task_complete" or action_type == "exit":
             logger.debug("Task completed")
             result_text = action.get("result")
             if result_text:
@@ -910,12 +910,12 @@ class UnifiedSandboxClient(SandboxClient):
         # Route to appropriate handler based on action type
         try:
             # Browser actions
-            if action_type in ["CLICK", "TYPING", "PRESS", "KEY_DOWN", "KEY_UP", "HOTKEY",
-                              "SCROLL", "MOVE_TO", "MOVE_REL", "DRAG_TO", "DRAG_REL",
-                              "WAIT", "DOUBLE_CLICK", "RIGHT_CLICK",
-                              "DOM_GET_TEXT", "DOM_GET_HTML", "DOM_QUERY_SELECTOR",
-                              "DOM_EXTRACT_LINKS", "DOM_CLICK", "NAVIGATE",
-                              "screenshot", "get_info",
+            if action_type in ["browser_click", "browser_type", "browser_press", "browser_key_down", "browser_key_up", "browser_hotkey",
+                              "browser_scroll", "browser_move_to", "browser_move_rel", "browser_drag_to", "browser_drag_rel",
+                              "browser_wait", "browser_double_click", "browser_right_click",
+                              "dom_get_text", "dom_get_html", "dom_query_selector",
+                              "dom_extract_links", "dom_click", "browser_navigate",
+                              "browser_screenshot", "browser_get_info",
                               ]:
                 return self._handle_browser_action(action)
             
