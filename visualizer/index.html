@@ -499,20 +499,8 @@
             for (let iterIdx = 0; iterIdx < visualizationData.iterations.length; iterIdx++) {
                 const iter = visualizationData.iterations[iterIdx];
                 let iterationStarted = false;
+                let thinkShown = false;
                 
-                // Render think if it exists (always show think in left panel)
-                if (iter.think) {
-                    if (!iterationStarted) {
-                        html += `<div class="iteration-block" data-iteration="${iterIdx}">`;
-                        html += `<div class="iteration-header">Iteration ${iter.iteration}</div>`;
-                        iterationStarted = true;
-                    }
-                    html += `<div class="think-block">`;
-                    html += `<div class="think-label">Thought</div>`;
-                    html += `<div class="think-content">${escapeHtml(iter.think)}</div>`;
-                    html += `</div>`;
-                }
-
                 // Render actions if we've reached those steps
                 if (iter.actions && iter.actions.length > 0) {
                     for (let actionIdx = 0; actionIdx < iter.actions.length; actionIdx++) {
@@ -521,6 +509,15 @@
                                 html += `<div class="iteration-block" data-iteration="${iterIdx}">`;
                                 html += `<div class="iteration-header">Iteration ${iter.iteration}</div>`;
                                 iterationStarted = true;
+                                
+                                // Show think together with the first action
+                                if (iter.think && !thinkShown && actionIdx === 0) {
+                                    html += `<div class="think-block">`;
+                                    html += `<div class="think-label">Thought</div>`;
+                                    html += `<div class="think-content">${escapeHtml(iter.think)}</div>`;
+                                    html += `</div>`;
+                                    thinkShown = true;
+                                }
                             }
                             
                             const actionData = iter.actions[actionIdx];
