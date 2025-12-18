@@ -418,6 +418,7 @@
                 totalSteps = calculateTotalSteps(data);
                 currentStep = 0;
                 renderTrace(data);
+                navigateToStep(0); // Initialize display
                 updateProgress();
             } catch (error) {
                 console.error('Error loading visualization data:', error);
@@ -440,7 +441,34 @@
             return steps;
         }
 
-        // Render trace
+        // Get step data by index
+        function getStepData(step) {
+            if (!visualizationData || !visualizationData.iterations) return null;
+            
+            let current = 0;
+            for (let iterIdx = 0; iterIdx < visualizationData.iterations.length; iterIdx++) {
+                const iter = visualizationData.iterations[iterIdx];
+                
+                // Check if this step is the think
+                if (iter.think && current === step) {
+                    return { type: 'think', iterIdx, iter, actionIdx: null, actionData: null };
+                }
+                if (iter.think) current++;
+                
+                // Check actions
+                if (iter.actions) {
+                    for (let actionIdx = 0; actionIdx < iter.actions.length; actionIdx++) {
+                        if (current === step) {
+                            return { type: 'action', iterIdx, iter, actionIdx, actionData: iter.actions[actionIdx] };
+                        }
+                        current++;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Render trace up to current step
         function renderTrace(data) {
             const container = document.getElementById('traceContainer');
             if (!data.iterations || data.iterations.length === 0) {
@@ -448,91 +476,105 @@
                 return;
             }
 
-            let html = '';
-            data.iterations.forEach((iter, iterIdx) => {
-                html += `<div class="iteration-block" data-iteration="${iterIdx}">`;
-                html += `<div class="iteration-header">Iteration ${iter.iteration}</div>`;
-                
-                if (iter.think) {
-                    html += `<div class="think-block">`;
-                    html += `<div class="think-label">Thought</div>`;
-                    html += `<div class="think-content">${escapeHtml(iter.think)}</div>`;
-                    html += `</div>`;
-                }
-
-                if (iter.actions && iter.actions.length > 0) {
-                    iter.actions.forEach((actionData, actionIdx) => {
-                        const action = actionData.action || {};
-                        const actionType = action.action_type || 'unknown';
-                        const badgeClass = getBadgeClass(actionType);
-                        
-                        html += `<div class="action-block" data-iteration="${iterIdx}" data-action="${actionIdx}">`;
-                        html += `<div class="action-label">Action</div>`;
-                        html += `<div class="action-content">`;
-                        html += `<span class="action-type-badge ${badgeClass}">${actionType}</span>`;
-                        html += escapeHtml(JSON.stringify(action, null, 2));
-                        html += `</div>`;
-                        html += `</div>`;
-
-                        html += `<div class="observation-block">`;
-                        html += `<div class="observation-label">Observation</div>`;
-                        html += `<div class="observation-content">${escapeHtml(actionData.observation || '')}</div>`;
-                        html += `</div>`;
-                    });
-                }
-
-                html += `</div>`;
-            });
-
-            container.innerHTML = html;
-
-            // Add click handlers
-            container.querySelectorAll('.action-block, .think-block').forEach(block => {
-                block.style.cursor = 'pointer';
-                block.addEventListener('click', () => {
-                    const iterIdx = parseInt(block.dataset.iteration);
-                    const actionIdx = block.dataset.action !== undefined ? parseInt(block.dataset.action) : null;
-                    showContent(iterIdx, actionIdx);
-                });
-            });
+            // Render trace up to currentStep
+            updateTraceDisplay();
         }
 
-        // Show content for a specific action
-        function showContent(iterIdx, actionIdx) {
+        // Update trace display based on currentStep
+        function updateTraceDisplay() {
+            const container = document.getElementById('traceContainer');
             if (!visualizationData || !visualizationData.iterations) return;
 
-            const iter = visualizationData.iterations[iterIdx];
-            if (!iter) return;
-
-            const viewer = document.getElementById('contentViewer');
-            const header = document.getElementById('contentHeader');
-
-            if (actionIdx !== null && iter.actions && iter.actions[actionIdx]) {
-                const actionData = iter.actions[actionIdx];
-                const action = actionData.action || {};
-                const actionType = action.action_type || 'unknown';
-
-                header.textContent = `${actionType} - Iteration ${iter.iteration}`;
-
-                let content = '';
-
-                // Show screenshot if available
-                if (actionData.screenshot) {
-                    content += `<img src="data:image/png;base64,${actionData.screenshot}" alt="Screenshot">`;
+            let html = '';
+            let stepCount = 0;
+            
+            for (let iterIdx = 0; iterIdx < visualizationData.iterations.length; iterIdx++) {
+                const iter = visualizationData.iterations[iterIdx];
+                let iterationStarted = false;
+                
+                // Render think if it exists and we've reached that step
+                if (iter.think) {
+                    if (stepCount <= currentStep) {
+                        if (!iterationStarted) {
+                            html += `<div class="iteration-block" data-iteration="${iterIdx}">`;
+                            html += `<div class="iteration-header">Iteration ${iter.iteration}</div>`;
+                            iterationStarted = true;
+                        }
+                        html += `<div class="think-block">`;
+                        html += `<div class="think-label">Thought</div>`;
+                        html += `<div class="think-content">${escapeHtml(iter.think)}</div>`;
+                        html += `</div>`;
+                    }
+                    stepCount++;
                 }
 
-                // Show action details
-                content += `<pre>${escapeHtml(JSON.stringify(action, null, 2))}</pre>`;
+                // Render actions if we've reached those steps
+                if (iter.actions && iter.actions.length > 0) {
+                    for (let actionIdx = 0; actionIdx < iter.actions.length; actionIdx++) {
+                        if (stepCount <= currentStep) {
+                            if (!iterationStarted) {
+                                html += `<div class="iteration-block" data-iteration="${iterIdx}">`;
+                                html += `<div class="iteration-header">Iteration ${iter.iteration}</div>`;
+                                iterationStarted = true;
+                            }
+                            
+                            const actionData = iter.actions[actionIdx];
+                            const action = actionData.action || {};
+                            const actionType = action.action_type || 'unknown';
+                            const badgeClass = getBadgeClass(actionType);
+                            
+                            html += `<div class="action-block" data-iteration="${iterIdx}" data-action="${actionIdx}">`;
+                            html += `<div class="action-label">Action</div>`;
+                            html += `<div class="action-content">`;
+                            html += `<span class="action-type-badge ${badgeClass}">${actionType}</span>`;
+                            html += escapeHtml(JSON.stringify(action, null, 2));
+                            html += `</div>`;
+                            html += `</div>`;
 
-                // Show observation
-                if (actionData.observation) {
-                    content += `<div class="file-content">${escapeHtml(actionData.observation)}</div>`;
+                            html += `<div class="observation-block">`;
+                            html += `<div class="observation-label">Observation</div>`;
+                            html += `<div class="observation-content">${escapeHtml(actionData.observation || '')}</div>`;
+                            html += `</div>`;
+                        }
+                        stepCount++;
+                    }
                 }
+                
+                if (iterationStarted) {
+                    html += `</div>`;
+                }
+            }
 
-                viewer.innerHTML = content;
-            } else if (iter.think) {
-                header.textContent = `Thought - Iteration ${iter.iteration}`;
-                viewer.innerHTML = `<div class="file-content">${escapeHtml(iter.think)}</div>`;
+            container.innerHTML = html || '<div class="empty-state">No steps to display</div>';
+            
+            // Scroll to bottom to show latest step
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Show content for a specific action (kept for backward compatibility, but now uses navigateToStep)
+        function showContent(iterIdx, actionIdx) {
+            // Find the step index for this iteration/action
+            let step = 0;
+            for (let i = 0; i < visualizationData.iterations.length; i++) {
+                const iter = visualizationData.iterations[i];
+                if (i < iterIdx) {
+                    if (iter.think) step++;
+                    if (iter.actions) step += iter.actions.length;
+                } else if (i === iterIdx) {
+                    if (iter.think && actionIdx === null) {
+                        currentStep = step;
+                        navigateToStep(step);
+                        updateProgress();
+                        return;
+                    }
+                    if (iter.think) step++;
+                    if (iter.actions && actionIdx !== null) {
+                        currentStep = step + actionIdx;
+                        navigateToStep(currentStep);
+                        updateProgress();
+                        return;
+                    }
+                }
             }
         }
 
@@ -639,25 +681,44 @@
         }
 
         function navigateToStep(step) {
-            // Find the step in the data and show it
-            let current = 0;
-            for (let iterIdx = 0; iterIdx < visualizationData.iterations.length; iterIdx++) {
-                const iter = visualizationData.iterations[iterIdx];
-                if (iter.think && current === step) {
-                    showContent(iterIdx, null);
-                    return;
+            // Update both left and right panels
+            updateTraceDisplay();
+            
+            const stepData = getStepData(step);
+            if (!stepData) {
+                document.getElementById('contentViewer').innerHTML = '<div class="empty-state">No data for this step</div>';
+                document.getElementById('contentHeader').textContent = 'Content Viewer';
+                return;
+            }
+
+            const viewer = document.getElementById('contentViewer');
+            const header = document.getElementById('contentHeader');
+
+            if (stepData.type === 'action' && stepData.actionData) {
+                const action = stepData.actionData.action || {};
+                const actionType = action.action_type || 'unknown';
+
+                header.textContent = `${actionType} - Iteration ${stepData.iter.iteration}`;
+
+                let content = '';
+
+                // Show screenshot if available
+                if (stepData.actionData.screenshot) {
+                    content += `<img src="data:image/png;base64,${stepData.actionData.screenshot}" alt="Screenshot">`;
                 }
-                if (iter.think) current++;
-                
-                if (iter.actions) {
-                    for (let actionIdx = 0; actionIdx < iter.actions.length; actionIdx++) {
-                        if (current === step) {
-                            showContent(iterIdx, actionIdx);
-                            return;
-                        }
-                        current++;
-                    }
+
+                // Show action details
+                content += `<pre>${escapeHtml(JSON.stringify(action, null, 2))}</pre>`;
+
+                // Show observation
+                if (stepData.actionData.observation) {
+                    content += `<div class="file-content">${escapeHtml(stepData.actionData.observation)}</div>`;
                 }
+
+                viewer.innerHTML = content;
+            } else if (stepData.type === 'think' && stepData.iter.think) {
+                header.textContent = `Thought - Iteration ${stepData.iter.iteration}`;
+                viewer.innerHTML = `<div class="file-content">${escapeHtml(stepData.iter.think)}</div>`;
             }
         }
 
