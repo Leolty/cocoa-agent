@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  An Evaluation Framework for General Agents with Compositional Cognitive Abilities
+  A Framework for Evaluating and Developing Next-Generation Unified Agents
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ## What's Inside
 
-- **CocoaBench Dataset** — Benchmark tasks designed around cognitive abilities (perception, reasoning, memory) rather than specific tools
+- **CocoaBench Dataset** — Benchmark tasks designed for agents capable of solving complex tasks by writing code, operating GUI, etc.
 - **CocoaAgent Framework** — Model-agnostic agent executor that equips agents with general tools (browser, terminal, file operations, code interpreter) via [AIO Sandbox](https://github.com/agent-infra/sandbox)
 
 ## Prerequisites
@@ -27,17 +27,6 @@
 - Python 3.13+
 - Docker & Docker Compose
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
-
-## Why CocoaBench?
-
-Current agent benchmarks often reward domain-specific workflows rather than general cognitive abilities. CocoaBench focuses on:
-
-- **Perception**: How agents extract and preprocess information from diverse sources (websites, files, images)
-- **Reasoning**: Multi-step planning with deductive, inductive, and abductive inference
-- **Memory**: Managing working memory and procedural skills across long trajectories
-- **Composition**: How agents combine these abilities to solve complex, open-ended tasks
-
-Tasks are human-understandable and automatically evaluated, but designed to challenge agents that can adapt across domains rather than overfit to specific environments.
 
 ## Quick Start
 
