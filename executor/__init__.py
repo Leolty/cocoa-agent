@@ -363,6 +363,10 @@ class TaskExecutor:
         if task_result:
             result_dict["task_result"] = task_result
         
+        # Add API cost statistics if controller supports it
+        if hasattr(self.controller, "get_cost_stats"):
+            result_dict["api_cost_stats"] = self.controller.get_cost_stats()
+        
         return result_dict
 
     @measure_execution_time

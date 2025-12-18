@@ -623,6 +623,160 @@ class Controller:
         return
 
 
+# OpenAI API Pricing (per 1M tokens)
+OPENAI_PRICING = {
+    # Flagship models
+    "gpt-5.2": {
+        "input": 1.750,
+        "cached_input": 0.175,
+        "output": 14.000
+    },
+    "gpt-5.2-pro": {
+        "input": 21.00,
+        "cached_input": None,
+        "output": 168.00
+    },
+    "gpt-5-mini": {
+        "input": 0.250,
+        "cached_input": 0.025,
+        "output": 2.000
+    },
+    # Fine-tuning models
+    "gpt-4.1": {
+        "input": 3.00,
+        "cached_input": 0.75,
+        "output": 12.00
+    },
+    "gpt-4.1-mini": {
+        "input": 0.80,
+        "cached_input": 0.20,
+        "output": 3.20
+    },
+    "gpt-4.1-nano": {
+        "input": 0.20,
+        "cached_input": 0.05,
+        "output": 0.80
+    },
+    "o4-mini": {
+        "input": 4.00,
+        "cached_input": 1.00,
+        "output": 16.00
+    },
+    # Realtime API - Text
+    "gpt-realtime": {
+        "input": 4.00,
+        "cached_input": 0.40,
+        "output": 16.00
+    },
+    "gpt-realtime-mini": {
+        "input": 0.60,
+        "cached_input": 0.06,
+        "output": 2.40
+    },
+    # Image Generation API - Text
+    "gpt-image-1.5": {
+        "input": 5.00,
+        "cached_input": 1.25,
+        "output": 10.00
+    },
+    "gpt-image-1": {
+        "input": 5.00,
+        "cached_input": 1.25,
+        "output": None
+    },
+    "gpt-image-1-mini": {
+        "input": 2.00,
+        "cached_input": 0.20,
+        "output": None
+    },
+    # Legacy models (fallback pricing)
+    "gpt-4o": {
+        "input": 2.50,
+        "cached_input": 0.25,
+        "output": 10.00
+    },
+    "gpt-4o-mini": {
+        "input": 0.15,
+        "cached_input": 0.015,
+        "output": 0.60
+    },
+    "gpt-4-turbo": {
+        "input": 10.00,
+        "cached_input": 1.00,
+        "output": 30.00
+    },
+    "gpt-3.5-turbo": {
+        "input": 0.50,
+        "cached_input": 0.25,
+        "output": 1.50
+    }
+}
+
+
+def get_model_pricing(model_name: str) -> Dict[str, float | None]:
+    """Get pricing for a model, with fallback to closest match.
+    
+    Args:
+        model_name: Model name (e.g., "gpt-5.2", "gpt-4.1")
+        
+    Returns:
+        Dictionary with input, cached_input, and output pricing per 1M tokens
+    """
+    model_lower = model_name.lower()
+    
+    # Direct match
+    if model_lower in OPENAI_PRICING:
+        return OPENAI_PRICING[model_lower]
+    
+    # Try to match by prefix
+    for key, pricing in OPENAI_PRICING.items():
+        if model_lower.startswith(key) or key in model_lower:
+            return pricing
+    
+    # Default fallback to gpt-4.1 pricing
+    logger.warning(f"Unknown model pricing for {model_name}, using gpt-4.1 pricing as fallback")
+    return OPENAI_PRICING.get("gpt-4.1", {"input": 3.00, "cached_input": 0.75, "output": 12.00})
+
+
+def calculate_cost(usage, model_name: str) -> float:
+    """Calculate API cost from usage information.
+    
+    Args:
+        usage: Usage object from OpenAI API response (has prompt_tokens, completion_tokens, total_tokens, cached_tokens)
+        model_name: Model name for pricing lookup
+        
+    Returns:
+        Total cost in USD
+    """
+    pricing = get_model_pricing(model_name)
+    
+    # Get token counts (default to 0 if not present)
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    cached_tokens = getattr(usage, "cached_tokens", 0) or 0
+    
+    # Calculate costs
+    input_cost = 0.0
+    if cached_tokens > 0 and pricing.get("cached_input") is not None:
+        # Use cached pricing for cached tokens
+        input_cost += (cached_tokens / 1_000_000) * pricing["cached_input"]
+        # Use regular input pricing for non-cached tokens
+        non_cached = prompt_tokens - cached_tokens
+        if non_cached > 0 and pricing.get("input") is not None:
+            input_cost += (non_cached / 1_000_000) * pricing["input"]
+    else:
+        # All tokens use regular input pricing
+        if pricing.get("input") is not None:
+            input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
+    
+    output_cost = 0.0
+    if completion_tokens > 0 and pricing.get("output") is not None:
+        output_cost = (completion_tokens / 1_000_000) * pricing["output"]
+    
+    total_cost = input_cost + output_cost
+    return total_cost
+
+
 class LLM(Controller):
     """Language model client using OpenAI API."""
 
@@ -666,6 +820,13 @@ class LLM(Controller):
         self.client = OpenAI(**client_kwargs)
         self.messages: List[Dict[str, str]] = []
         self.last_think: str | None = None  # Store the last think/reasoning content for visualization
+        
+        # Cost tracking
+        self.total_cost: float = 0.0
+        self.total_input_tokens: int = 0
+        self.total_output_tokens: int = 0
+        self.total_cached_tokens: int = 0
+        self.api_calls: int = 0
         
         # Store client type and determine tool usage
         self.client_type = client_type
@@ -779,6 +940,24 @@ class LLM(Controller):
                     api_params["tools"] = self.tools
                 
                 response = self.client.chat.completions.create(**api_params)
+
+                # Calculate and track API cost
+                if hasattr(response, "usage") and response.usage:
+                    usage = response.usage
+                    cost = calculate_cost(usage, self.model)
+                    self.total_cost += cost
+                    self.total_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
+                    self.total_output_tokens += getattr(usage, "completion_tokens", 0) or 0
+                    self.total_cached_tokens += getattr(usage, "cached_tokens", 0) or 0
+                    self.api_calls += 1
+                    
+                    logger.info(
+                        f"API call cost: ${cost:.6f} | "
+                        f"Tokens: {getattr(usage, 'prompt_tokens', 0)} input, "
+                        f"{getattr(usage, 'completion_tokens', 0)} output, "
+                        f"{getattr(usage, 'cached_tokens', 0)} cached | "
+                        f"Total cost: ${self.total_cost:.6f}"
+                    )
 
                 message = response.choices[0].message
                 
@@ -1209,6 +1388,32 @@ class LLM(Controller):
         """Clear the message history."""
         logger.debug(f"Clearing message history ({len(self.messages)} messages removed)")
         self.messages = []
+        # Note: Cost tracking is NOT reset on clear_history to maintain cumulative cost
+
+    def get_cost_stats(self) -> Dict[str, Any]:
+        """Get API cost and usage statistics.
+        
+        Returns:
+            Dictionary with cost and token usage information
+        """
+        return {
+            "total_cost_usd": round(self.total_cost, 6),
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "total_cached_tokens": self.total_cached_tokens,
+            "total_tokens": self.total_input_tokens + self.total_output_tokens,
+            "api_calls": self.api_calls,
+            "model": self.model
+        }
+    
+    def reset_cost_tracking(self) -> None:
+        """Reset cost tracking statistics."""
+        logger.debug("Resetting cost tracking")
+        self.total_cost = 0.0
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_cached_tokens = 0
+        self.api_calls = 0
         self.last_think = None
     
     def get_last_think(self) -> str | None:
