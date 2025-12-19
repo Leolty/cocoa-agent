@@ -930,7 +930,7 @@ class BrowserSandboxClient(SandboxClient):
                 selector = f'[data-cocoa-bid="{bid}"]'
                 element = await page.query_selector(selector)
                 if not element:
-                    return f"No element found with BID '{bid}'. Run dom_mark_elements again to refresh BIDs."
+                    return f"ERROR: No element found with BID '{bid}'. This BID is stale/invalid. DO NOT retry this BID. You MUST run dom_mark_elements() again to get fresh BIDs, then find your target element in the new list and use its new BID."
                 
                 # Get element info before clicking
                 tag_name = await element.evaluate('el => el.tagName.toLowerCase()')
@@ -999,7 +999,7 @@ class BrowserSandboxClient(SandboxClient):
                 selector = f'[data-cocoa-bid="{bid}"]'
                 element = await page.query_selector(selector)
                 if not element:
-                    return f"No element found with BID '{bid}'"
+                    return f"ERROR: No element found with BID '{bid}'. This BID is stale/invalid. DO NOT retry this BID. You MUST run dom_mark_elements() again to get fresh BIDs."
                 
                 await element.scroll_into_view_if_needed(timeout=timeout_ms)
                 await element.hover(timeout=timeout_ms)
@@ -1024,7 +1024,7 @@ class BrowserSandboxClient(SandboxClient):
                 selector = f'[data-cocoa-bid="{bid}"]'
                 element = await page.query_selector(selector)
                 if not element:
-                    return f"No element found with BID '{bid}'"
+                    return f"ERROR: No element found with BID '{bid}'. This BID is stale/invalid. DO NOT retry this BID. You MUST run dom_mark_elements() again to get fresh BIDs."
                 
                 await element.scroll_into_view_if_needed(timeout=timeout_ms)
                 
@@ -1053,7 +1053,7 @@ class BrowserSandboxClient(SandboxClient):
                     selector = f'[data-cocoa-bid="{bid}"]'
                     element = await page.query_selector(selector)
                     if not element:
-                        return f"No element found with BID '{bid}'"
+                        return f"ERROR: No element found with BID '{bid}'. This BID is stale/invalid. DO NOT retry this BID. You MUST run dom_mark_elements() again to get fresh BIDs."
                     
                     await element.scroll_into_view_if_needed(timeout=timeout_ms)
                     await element.press(key, timeout=timeout_ms)
@@ -1076,7 +1076,7 @@ class BrowserSandboxClient(SandboxClient):
                     selector = f'[data-cocoa-bid="{bid}"]'
                     element = await page.query_selector(selector)
                     if not element:
-                        return f"No element found with BID '{bid}'"
+                        return f"ERROR: No element found with BID '{bid}'. This BID is stale/invalid. DO NOT retry this BID. You MUST run dom_mark_elements() again to get fresh BIDs."
                     
                     # Get scroll info before scrolling
                     scroll_info_before = await element.evaluate("""

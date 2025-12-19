@@ -156,6 +156,12 @@ Task:
   - **First step**: Use `dom_mark_elements()` to get a list of all interactive elements with their BIDs
   - **Then use**: `dom_click(bid)`, `dom_type(bid, text)`, `dom_hover(bid)`, `dom_press(bid, key)`, `dom_scroll(bid, direction)` with the BIDs from `dom_mark_elements`
   - DOM operations are more reliable, faster, and don't require visual verification
+  - **CRITICAL: BIDs are DYNAMIC and TEMPORARY**
+    - BIDs are reassigned every time you run `dom_mark_elements()`
+    - **NEVER reuse old BIDs** from previous `dom_mark_elements()` calls
+    - If a click fails with "No element found with BID", the BID is stale - you MUST run `dom_mark_elements()` again to get fresh BIDs
+    - After any page change (navigation, modal open/close, element state change), run `dom_mark_elements()` again
+    - **DO NOT repeatedly click the same stale BID** - if it fails once, refresh BIDs immediately
   - **Only use on-screen actions** when:
     - DOM operations fail after multiple attempts
     - Target elements are not accessible via DOM (e.g., canvas, video controls, custom widgets)
@@ -222,6 +228,20 @@ Task:
    - If no meaningful change, treat as failed and try different approach
 
 #### (c) Failure Modes and Recovery
+
+**DOM Operation Failures:**
+- **Common causes:**
+  - **Stale BID**: BID from previous `dom_mark_elements()` call is no longer valid (element was re-rendered, page changed, etc.)
+  - Element removed from DOM after previous action
+  - Element not yet loaded or visible
+- **Recovery strategies:**
+  - **If click/hover/type fails with "No element found with BID"**: 
+    - **IMMEDIATELY run `dom_mark_elements()` again** to get fresh BIDs
+    - **DO NOT retry the same stale BID** - it will never work
+    - Find the target element in the new BID list and use the new BID
+  - **If same BID fails > 1 time**: Stop retrying that BID, refresh BIDs immediately
+  - **After page state changes** (modal opens/closes, navigation, element updates): Always run `dom_mark_elements()` again
+  - **If element keeps disappearing**: The element may be dynamically recreated - use `dom_query_selector` to find it by attributes instead
 
 **On-Screen Action Failures:**
 - **Common causes:**
@@ -437,6 +457,12 @@ Task:
   - **First step**: Use `dom_mark_elements()` to get a list of all interactive elements with their BIDs
   - **Then use**: `dom_click(bid)`, `dom_type(bid, text)`, `dom_hover(bid)`, `dom_press(bid, key)`, `dom_scroll(bid, direction)` with the BIDs from `dom_mark_elements`
   - DOM operations are more reliable, faster, and don't require visual verification
+  - **CRITICAL: BIDs are DYNAMIC and TEMPORARY**
+    - BIDs are reassigned every time you run `dom_mark_elements()`
+    - **NEVER reuse old BIDs** from previous `dom_mark_elements()` calls
+    - If a click fails with "No element found with BID", the BID is stale - you MUST run `dom_mark_elements()` again to get fresh BIDs
+    - After any page change (navigation, modal open/close, element state change), run `dom_mark_elements()` again
+    - **DO NOT repeatedly click the same stale BID** - if it fails once, refresh BIDs immediately
   - **Only use on-screen actions** when:
     - DOM operations fail after multiple attempts
     - Target elements are not accessible via DOM (e.g., canvas, video controls, custom widgets)
@@ -503,6 +529,20 @@ Task:
    - If no meaningful change, treat as failed and try different approach
 
 #### (c) Failure Modes and Recovery
+
+**DOM Operation Failures:**
+- **Common causes:**
+  - **Stale BID**: BID from previous `dom_mark_elements()` call is no longer valid (element was re-rendered, page changed, etc.)
+  - Element removed from DOM after previous action
+  - Element not yet loaded or visible
+- **Recovery strategies:**
+  - **If click/hover/type fails with "No element found with BID"**: 
+    - **IMMEDIATELY run `dom_mark_elements()` again** to get fresh BIDs
+    - **DO NOT retry the same stale BID** - it will never work
+    - Find the target element in the new BID list and use the new BID
+  - **If same BID fails > 1 time**: Stop retrying that BID, refresh BIDs immediately
+  - **After page state changes** (modal opens/closes, navigation, element updates): Always run `dom_mark_elements()` again
+  - **If element keeps disappearing**: The element may be dynamically recreated - use `dom_query_selector` to find it by attributes instead
 
 **On-Screen Action Failures:**
 - **Common causes:**
