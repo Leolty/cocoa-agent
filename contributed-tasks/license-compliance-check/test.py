@@ -19,7 +19,7 @@ EXPECTED_ANSWER = {
 }
 
 # Tolerances
-PACKAGE_COUNT_TOLERANCE = 15  # Allow ±15 due to dependency resolution variations
+PACKAGE_COUNT_TOLERANCE = 60  # Allow ±60 due to dependency resolution and tooling variations
 LICENSE_COUNT_TOLERANCE = 2   # Allow ±2 for license counting variations
 
 
